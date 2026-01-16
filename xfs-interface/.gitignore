@@ -4,7 +4,6 @@ disk.xfs
 *.dat
 *~
 *.o
-*.xsm
 *.txt
 *.tmp
 *.dSYM
