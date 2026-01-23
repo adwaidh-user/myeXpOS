@@ -5,7 +5,9 @@ loadi(64, 14);
 //Init Code
 loadi(65, 7);
 loadi(66, 8);
-
+//Int7
+loadi(16,29);
+loadi(17,30);
 //Int10: EXIT
 loadi(22, 35);
 loadi(23, 36);
