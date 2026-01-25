@@ -26,8 +26,8 @@ then
 else
   breakpoint;
   alias word R5;
-  word = ([PTBR + 2 * ((userSP - 3) / 512)] * 512) + ((userSP - 3) % 512);
-  print [word];
+  word = [[PTBR + 2 * ((userSP - 3) / 512)] * 512 + ((userSP - 3) % 512)];
+  print word;
   alias physicalAddrRetVal R6;
   physicalAddrRetVal = ([PTBR + 2 * ((userSP - 1) / 512)] * 512) + ((userSP - 1) % 512);
   [physicalAddrRetVal] = 0;
