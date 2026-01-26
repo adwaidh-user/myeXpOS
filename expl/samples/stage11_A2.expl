@@ -1,24 +1,24 @@
-int main()
-{
 type
-Student {
+student{
   str name;
   int marks;
 }
 endtype
+
+int main() {
 decl
-  int temp;
-  Student a;
+  int temp, val;
+  student a;
 enddecl
 
 begin
-  intialize();
+  val = initialize();
   a = alloc();
   a.name = "John";
   a.marks = 89;
   temp = exposcall( "Write", -2, a.name);
   temp = exposcall( "Write", -2, a.marks);
-  retval = free(a);
+  free(a);
   return 0;
 end
 }
