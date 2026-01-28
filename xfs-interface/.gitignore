@@ -1,10 +1,4 @@
-xfs-interface
-run.sh
-*.dat
 *~
-*.o
-*.txt
-*.tmp
 *.dSYM
 *.vscode/
 .DS_Store
