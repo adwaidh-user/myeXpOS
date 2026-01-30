@@ -18,6 +18,13 @@ loadi(3, 16);
 loadi(4, 17);
 loadi(5, 18);
 
+// Loading MODULE 5 (SCHEDULER)
+loadi(50, 63);
+loadi(51, 64);
+
+// Loading evennums.xsm
+loadi(83, 70);
+
 // Setting up the INIT PROCESS
 // ---------INIT PROCESS---------
 // ------------------------------
@@ -65,5 +72,58 @@ PTLR = 10;
 [PROCESS_TABLE + 16 + 15] = PTLR;
 
 [76 * 512] = [65 * 512 + 1];
+
+
+// evennums.xsm
+PTBR = PAGE_TABLE_BASE+40;
+
+// --------PAGE_TABLE-------------
+
+// Library
+[PTBR+0] = 63;
+[PTBR+1] = "0100";
+[PTBR+2] = 64;
+[PTBR+3] = "0100";
+
+// Heap
+[PTBR+4] = 84;
+[PTBR+5] = "0110";
+[PTBR+6] = 85;
+[PTBR+7] = "0110";
+
+// Code
+[PTBR+8] = 83;
+[PTBR+9] = "0100";
+[PTBR+10] = -1;
+[PTBR+11] = "0000";
+[PTBR+12] = -1;
+[PTBR+13] = "0000";
+[PTBR+14] = -1;
+[PTBR+15] = "0000";
+
+// Stack
+[PTBR+16] = 86;
+[PTBR+17] = "0110";
+[PTBR+18] = -1;
+[PTBR+19] = "0000";
+
+// ----------PROCESS_TABLE-----------
+
+[PROCESS_TABLE + 32 + 1] = 2;
+[PROCESS_TABLE + 32 + 4] = CREATED;
+[PROCESS_TABLE + 32 + 11] = 87;
+[PROCESS_TABLE + 32 + 12] = 0;
+[PROCESS_TABLE + 32 + 13] = 8*512;
+[PROCESS_TABLE + 32 + 14] = PTBR;
+[PROCESS_TABLE + 32 + 15] = PTLR;
+
+[86 * 512] = [83 * 512 + 1];
+
+alias i R0;
+i = 3;
+while (i < 16) do
+  [PROCESS_TABLE + i * 16 + 4] = TERMINATED;
+  i = i + 1;
+endwhile;
 
 return;
