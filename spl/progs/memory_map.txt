@@ -1,0 +1,17 @@
+------------init (odd.xsm)----------
+stack - 76, 77
+heap  - 78, 79
+user area - 80
+------------idle----------
+stack - 81
+user area - 82
+------------exec_1(even.xsm)--------
+code - 83
+stack - 84, 85
+heap  - 86, 87
+user area - 88
+------------exec_2(prime.xsm)--------
+code - 89
+stack - 90, 91
+heap  - 92, 93
+user area - 94

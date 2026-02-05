@@ -1,8 +1,8 @@
-// Loading MODULE_7
+// MODULE_7
 loadi(54, 67);
 loadi(55, 68);
 
-// Loading IDLE CODE
+// IDLE
 loadi(69, 11);
 loadi(70, 12);
 
@@ -10,14 +10,11 @@ SP = 82 * 512 - 1;
 
 call BOOT_MODULE;
 
-// Setting up the IDLE PROCESS
-// ---------IDLE PROCESS---------
-// ------------------------------
+//<--------------IDLE PROCESS---------------->
 
 PTBR = PAGE_TABLE_BASE;
 PTLR = 10;
 
-// ---------PAGE_TABLE----------
 // Library
 [PTBR+0] = 63;
 [PTBR+1] = "0100";

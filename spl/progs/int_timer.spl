@@ -1,46 +1,39 @@
+//------------Switching stack from USER to KERNEL----------
 breakpoint;
 [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
 SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
 
+//----------backing up context-----------
+
+breakpoint;
 backup;
 
-alias currentPID R0;
-currentPID = [SYSTEM_STATUS_TABLE + 1];
-alias process_table_entry R1;
-process_table_entry = PROCESS_TABLE + currentPID * 16;
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 4] = READY;
 
-[process_table_entry + 12] = SP % 512;
-[process_table_entry + 14] = PTBR;
-[process_table_entry + 15] = PTLR;
+alias i R0;
+alias proc_table_addr R1;
 
-[process_table_entry + 4] = READY;
+i = 0;
+while (i < MAX_PROC_NUM) do
+  proc_table_addr = PROCESS_TABLE + 16 * i;
+  if ([proc_table_addr + 4] != TERMINATED) then
+    [proc_table_addr] = [proc_table_addr] + 1;
+  endif;
+  i = i + 1;
+endwhile;
 
-alias newPID R2;
-if (currentPID == 0) then
-  newPID = 1;
-else
-  newPID = 0;
-endif;
+call MOD_5;
 
-alias new_process_table R3;
-new_process_table = PROCESS_TABLE + newPID * 16;
+//<-------restoring context after leaving scheduler--------->
 
-//Set back Kernel SP, PTBR , PTLR
-SP =  [new_process_table + 11] * 512 + [new_process_table + 12] ;
-PTBR = [new_process_table + 14];
-PTLR = [new_process_table + 15];
-
-[SYSTEM_STATUS_TABLE + 1] = newPID;
-
-if([new_process_table + 4] == CREATED) then
-	[new_process_table + 4] = RUNNING;
-	SP = [new_process_table + 13];
-	ireturn;
-endif;
-[new_process_table + 4] = RUNNING;
+breakpoint;
 
 restore;
-SP = [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+
 breakpoint;
+
+SP = [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16 ) + 12] = 0;
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16 ) + 9] = 0;
 
 ireturn;
