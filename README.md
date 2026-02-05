@@ -19,9 +19,9 @@ This repo contains the files and source code for my SEM4 OS Lab, the eXpOS (eXpe
 - [x] Stage 12 - [Introduction to multiprogramming]
 
 ### Intermediate stages
-- [ ] Stage 13 - [Boot module]
-- [ ] Stage 14 - [Round robin scheduler]
-- [ ] Stage 15 - [Resource manager module]
+- [x] Stage 13 - [Boot module]
+- [x] Stage 14 - [Round robin scheduler]
+- [x] Stage 15 - [Resource manager module]
 - [ ] Stage 16 - [Console input]
 - [ ] Stage 17 - [Program loader]
 - [ ] Stage 18 - [Disk interrup handler]
