@@ -39,6 +39,7 @@ if (i > 16) then
   newPID = 0;
 endif;
 
+breakpoint;
 
 new_proc_table = PROCESS_TABLE + newPID * 16;
 
@@ -58,7 +59,5 @@ endif;
 [new_proc_table + 4] = RUNNING;
 
 multipop(BP);
-
-breakpoint;
 
 return;

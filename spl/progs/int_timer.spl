@@ -1,11 +1,6 @@
-//------------Switching stack from USER to KERNEL----------
-breakpoint;
 [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
 SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
 
-//----------backing up context-----------
-
-breakpoint;
 backup;
 
 [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 4] = READY;
@@ -24,13 +19,7 @@ endwhile;
 
 call MOD_5;
 
-//<-------restoring context after leaving scheduler--------->
-
-breakpoint;
-
 restore;
-
-breakpoint;
 
 SP = [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13];
 [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16 ) + 12] = 0;
