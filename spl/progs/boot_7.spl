@@ -17,9 +17,17 @@ loadi(3, 16);
 // TIMER Interrupt Routine
 loadi(4, 17);
 loadi(5, 18);
+// RESOURCE_MANAGER (MOD_0)
+loadi(40, 53);
+loadi(41, 54);
+// DEVICE_MANAGER (MOD_4)
+loadi(48, 61);
+loadi(49, 62);
 // SCHEDULER (MOD_5)
 loadi(50, 63);
 loadi(51, 64);
+
+[TERMINAL_STATUS_TABLE + 0] = 0;
 
 //<--------------- INIT PROCESS ------------->
 
