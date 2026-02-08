@@ -39,7 +39,6 @@ if (i > 16) then
   newPID = 0;
 endif;
 
-breakpoint;
 
 new_proc_table = PROCESS_TABLE + newPID * 16;
 

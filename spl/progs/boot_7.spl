@@ -5,6 +5,9 @@ loadi(64, 14);
 // INIT program
 loadi(65, 7);
 loadi(66, 8);
+// INT6
+loadi(14,27);
+loadi(15,28);
 // INT7
 loadi(16,29);
 loadi(17,30);
@@ -17,6 +20,9 @@ loadi(3, 16);
 // TIMER Interrupt Routine
 loadi(4, 17);
 loadi(5, 18);
+// CONSOLE Interrupt Routine
+loadi(8, 21);
+loadi(9, 22);
 // RESOURCE_MANAGER (MOD_0)
 loadi(40, 53);
 loadi(41, 54);
@@ -155,7 +161,7 @@ PTLR = 10;
 //-----------Setting other procs as TERMINATED-------------
 
 alias i R0;
-i = 4;
+i = 2;
 while (i < MAX_PROC_NUM) do
   [PROCESS_TABLE + i * 16 + 4] = TERMINATED;
   i = i + 1;
