@@ -1,0 +1,25 @@
+decl
+  str arr[10];
+enddecl
+
+int main() {
+  decl
+    int i, temp;
+  enddecl
+
+  begin
+    i = 0;
+    while (i < 10) do
+      temp = exposcall("Read", -1, arr[i]);
+      i = i + 1;
+    endwhile;
+
+    i = 0;
+    while (i < 10) do
+      temp = exposcall("Write", -2, arr[i]);
+      i = i + 1;
+    endwhile;
+    return 0;
+  end
+}
+

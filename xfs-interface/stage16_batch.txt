@@ -1,0 +1,10 @@
+load --module 7 ../spl/samples/boot_7.xsm
+load --module 4 ../spl/samples/dev_manager_4.xsm
+load --module 0 ../spl/samples/resource_manager_0.xsm
+load --module 5 ../spl/samples/scheduler_5.xsm
+load --int=6 ../spl/samples/int6.xsm
+load --int=7 ../spl/samples/int7.xsm
+load --int=10 ../spl/samples/int10.xsm
+load --int=timer ../spl/samples/int_timer.xsm
+load --int=console ../spl/samples/int_console.xsm
+load --idle ../expl/samples/idle.xsm
