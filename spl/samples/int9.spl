@@ -1,0 +1,121 @@
+//--------------------
+alias userSP R0;
+alias filename R1;
+alias i R2;
+alias temp R3;
+alias inode_index R4;
+alias process_table R5;
+alias code_size R6;
+//--------------------
+
+process_table = PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1];
+[process_table + 9] = 9;
+
+userSP = SP;
+
+[process_table + 13] = SP;
+SP = [process_table + 11] * 512 - 1;
+
+filename = [[PTBR + 2 * ((userSP - 4) / 512)] * 512 + ((userSP - 4) % 512)];
+
+i = 0;
+while (i < MAX_FILE_NUM) do
+temp = [INODE_TABLE + 16 * i + 1];
+  if (filename == temp) then
+    if ([INODE_TABLE + 16 * i + 0] == EXEC) then
+      inode_index = i;
+      break;
+    endif;
+  endif;
+  i = i + 1;
+endwhile;
+
+if (i == MAX_FILE_NUM) then
+  [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -1;
+  SP = userSP;
+  [process_table + 9] = 0;
+  ireturn;
+endif;
+
+multipush(R0, R1, R2, R3);
+
+R1 = EXIT_PROCESS;
+R1 = [SYSTEM_STATUS_TABLE + 1];
+call PROCESS_MANAGER;
+
+multipush(R0, R1, R2, R3);
+
+// Increment MEMORY_FREE_LIST entry
+temp = MEMORY_FREE_LIST + [process_table + 11];
+[temp] = [temp] + 1;
+
+// Decrement MEM_FREE_COUNT
+temp = SYSTEM_STATUS_TABLE + 2;
+[temp] = [temp] - 1;
+
+SP = [process_table + 11] * 512 - 1;
+[process_table + 4] = RUNNING;
+[process_table + 7] = inode_index;
+
+PTBR = PAGE_TABLE_BASE + [SYSTEM_STATUS_TABLE + 1] * 20;
+PTLR = 10;
+
+[PTBR + 0] = 63;
+[PTBR + 1] = "0100";
+[PTBR + 2] = 64;
+[PTBR + 3] = "0100";
+
+multipush(R0, R1, R2, R3, R4, R5);
+
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PTBR + 4] = R0;
+[PTBR + 5] = "0110";
+
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PTBR + 6] = R0;
+[PTBR + 7] = "0110";
+
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PTBR + 16] = R0;
+[PTBR + 17] = "0110";
+
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PTBR + 18] = R0;
+[PTBR + 19] = "0110";
+
+code_size = [INODE_TABLE + 16 * inode_index + 2] / 512;
+
+i = 0;
+while (i <= code_size) do
+  R1 = GET_FREE_PAGE;
+  call MEMORY_MANAGER;
+  temp = PTBR + 8 + 2 * i;
+  [temp] = R0;
+  [temp + 1] = "0100";
+  i = i + 1;
+endwhile;
+while (i < 4) do
+  temp = PTBR + 8 + 2 * i;
+  [temp] = -1;
+  [temp + 1] = "0000";
+  i = i + 1;
+endwhile;
+
+multipop(R0, R1, R2, R3, R4, R5);
+
+i = 0;
+while (i <= code_size) do
+  loadi([PTBR + 8 + i * 2], [INODE_TABLE + 16 * inode_index + 8 + i]);
+  i = i + 1;
+endwhile;
+
+[[PTBR + 16] * 512] = [[PTBR + 8] * 512 + 1];
+
+SP = 8 * 512;
+[process_table + 9] = 0;
+
+ireturn;

@@ -1,17 +1,27 @@
+//--------------------
+alias i R0;
+//--------------------
+
 // library
 loadi(63, 13);
 loadi(64, 14);
 
+// INODE + USER table
+loadi(59, 3);
+loadi(60, 4);
 // INIT program
 loadi(65, 7);
 loadi(66, 8);
-// INT6
+// ( INT_6 )
 loadi(14,27);
 loadi(15,28);
-// INT7
+// ( INT_7 )
 loadi(16,29);
 loadi(17,30);
-// INT10
+// ( INT_9 )
+loadi(20, 33);
+loadi(21, 34);
+// ( INT_10 )
 loadi(22, 35);
 loadi(23, 36);
 // EXCEPTION HANDLER
@@ -26,12 +36,36 @@ loadi(9, 22);
 // RESOURCE_MANAGER (MOD_0)
 loadi(40, 53);
 loadi(41, 54);
+// RESOURCE_MANAGER (MOD_1)
+loadi(42, 55);
+loadi(43, 56);
+// RESOURCE_MANAGER (MOD_2)
+loadi(44, 57);
+loadi(45, 58);
 // DEVICE_MANAGER (MOD_4)
 loadi(48, 61);
 loadi(49, 62);
 // SCHEDULER (MOD_5)
 loadi(50, 63);
 loadi(51, 64);
+
+i = 0;
+// non user progs use pages 0 - 75
+// init and idle progs use pages 76 - 82
+while (i < 82) do
+  [MEMORY_FREE_LIST + i] = 1;
+  i = i + 1;
+endwhile;
+while (i < 128) do
+  [MEMORY_FREE_LIST + i] = 0;
+  i = i + 1;
+endwhile;
+
+//<--------initialize WAIT_MEM_COUNT & MEM_FREE_COUNT-------->
+
+[SYSTEM_STATUS_TABLE + 3] = 0;
+[SYSTEM_STATUS_TABLE + 2] = (128 - 83);
+
 
 [TERMINAL_STATUS_TABLE + 0] = 0;
 
@@ -78,8 +112,8 @@ PTLR = 10;
 
 [76 * 512] = [65 * 512 + 1];
 
-//<--------------- even program ------------->
-loadi(83, 69);
+//<--------------- exec1 program ------------->
+loadi(83, 71);
 
 PTBR = PAGE_TABLE_BASE + 40;
 PTLR = 10;
@@ -160,8 +194,7 @@ PTLR = 10;
 
 //-----------Setting other procs as TERMINATED-------------
 
-alias i R0;
-i = 2;
+i = 3;
 while (i < MAX_PROC_NUM) do
   [PROCESS_TABLE + i * 16 + 4] = TERMINATED;
   i = i + 1;

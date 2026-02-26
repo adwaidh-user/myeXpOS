@@ -1,0 +1,43 @@
+//--------------------
+alias reqPID R0;
+alias process_table_entry R1;
+alias i R3;
+alias state R4;
+//--------------------
+
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+
+backup;
+
+reqPID = [TERMINAL_STATUS_TABLE + 1];
+process_table_entry = PROCESS_TABLE + reqPID * 16;
+
+[process_table_entry + 8] = P0;
+
+//multipush(R0, R1, R2);
+
+//R1 = RELEASE_TERMINAL;
+//R2 = reqPID;
+
+//call RESOURCE_MANAGER;
+
+[TERMINAL_STATUS_TABLE + 0] = 0;
+
+i = 1;
+while (i < 16) do
+  state = PROCESS_TABLE + 16 * i + 4;
+  if ([state] == WAIT_TERMINAL) then
+    [state] = READY;
+  endif;
+  i = i + 1;
+endwhile;
+
+//multipop(R0, R1, R2);
+
+restore;
+
+SP = [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+
+ireturn;
+
