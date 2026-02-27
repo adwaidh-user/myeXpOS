@@ -31,8 +31,8 @@ else
   [physicalAddrRetVal] = 0;
 endif;
 
-SP = userSP;
 [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16 ) + 9] = 0;
+SP = userSP;
 
 ireturn;
 

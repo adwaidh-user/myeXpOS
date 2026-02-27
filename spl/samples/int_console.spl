@@ -13,14 +13,14 @@ process_table_entry = PROCESS_TABLE + reqPID * 16;
 
 [process_table_entry + 8] = P0;
 
-multipush(R0, R1, R2);
+multipush(R0, R1);
 
 R1 = RELEASE_TERMINAL;
 R2 = reqPID;
 
 call RESOURCE_MANAGER;
 
-multipop(R0, R1, R2);
+multipop(R0, R1);
 
 restore;
 

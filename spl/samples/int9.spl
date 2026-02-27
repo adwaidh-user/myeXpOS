@@ -1,121 +1,138 @@
-//--------------------
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] = SP;
+
 alias userSP R0;
-alias filename R1;
-alias i R2;
-alias temp R3;
-alias inode_index R4;
-alias process_table R5;
-alias code_size R6;
-//--------------------
-
-process_table = PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1];
-[process_table + 9] = 9;
-
 userSP = SP;
 
-[process_table + 13] = SP;
-SP = [process_table + 11] * 512 - 1;
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11] * 512 - 1;
 
-filename = [[PTBR + 2 * ((userSP - 4) / 512)] * 512 + ((userSP - 4) % 512)];
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 9;
 
-i = 0;
-while (i < MAX_FILE_NUM) do
-temp = [INODE_TABLE + 16 * i + 1];
-  if (filename == temp) then
-    if ([INODE_TABLE + 16 * i + 0] == EXEC) then
-      inode_index = i;
-      break;
+alias physicalPageNumber R1;
+alias offset R2;
+alias physicalAddress R3;
+alias page_table R5;
+
+page_table = PAGE_TABLE_BASE + 20 * [SYSTEM_STATUS_TABLE + 1];
+
+physicalPageNumber = [page_table + 2 * ((userSP - 4) / 512)];
+offset = (userSP - 4) % 512;
+physicalAddress = physicalPageNumber * 512 + offset;
+
+alias fileName R6;
+fileName = [physicalAddress];
+
+alias inodeEntry R7;
+alias flag R8;
+
+inodeEntry = 0;
+flag = 0;
+
+while (inodeEntry < MAX_FILE_NUM) do
+    if (fileName == [INODE_TABLE + inodeEntry * 16 + 1]) then
+        if ([INODE_TABLE + inodeEntry * 16] == EXEC) then
+            flag = 1;
+            break;
+        endif;
     endif;
-  endif;
-  i = i + 1;
+    inodeEntry = inodeEntry + 1;
 endwhile;
 
-if (i == MAX_FILE_NUM) then
-  [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -1;
-  SP = userSP;
-  [process_table + 9] = 0;
-  ireturn;
+if (flag == 0) then
+    physicalPageNumber = [page_table + 2 * ((userSP - 1) / 512)];
+    offset = (userSP - 1) % 512;
+    [physicalPageNumber * 512 + offset] = -1;
+    [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+    SP = userSP;
+    ireturn;
 endif;
 
-multipush(R0, R1, R2, R3);
+multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8);
 
-R1 = EXIT_PROCESS;
-R1 = [SYSTEM_STATUS_TABLE + 1];
-call PROCESS_MANAGER;
+R1 = 3;
+R2 = [SYSTEM_STATUS_TABLE + 1];
 
-multipush(R0, R1, R2, R3);
+call MOD_1;
 
-// Increment MEMORY_FREE_LIST entry
-temp = MEMORY_FREE_LIST + [process_table + 11];
-[temp] = [temp] + 1;
+multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8);
 
-// Decrement MEM_FREE_COUNT
-temp = SYSTEM_STATUS_TABLE + 2;
-[temp] = [temp] - 1;
+alias userAreaPageNumber R9;
+userAreaPageNumber = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11];
 
-SP = [process_table + 11] * 512 - 1;
-[process_table + 4] = RUNNING;
-[process_table + 7] = inode_index;
+[MEMORY_FREE_LIST + userAreaPageNumber] = [MEMORY_FREE_LIST + userAreaPageNumber] + 1;
 
-PTBR = PAGE_TABLE_BASE + [SYSTEM_STATUS_TABLE + 1] * 20;
-PTLR = 10;
+[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
 
+SP = userAreaPageNumber * 512;
+
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 4] = RUNNING;
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 7] = inodeEntry;
+
+// Allocating pages
+// Library
 [PTBR + 0] = 63;
 [PTBR + 1] = "0100";
 [PTBR + 2] = 64;
 [PTBR + 3] = "0100";
 
-multipush(R0, R1, R2, R3, R4, R5);
+multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
 
-R1 = GET_FREE_PAGE;
-call MEMORY_MANAGER;
+// Heap
+R1 = 1;
+call MOD_2;
 [PTBR + 4] = R0;
 [PTBR + 5] = "0110";
 
-R1 = GET_FREE_PAGE;
-call MEMORY_MANAGER;
+R1 = 1;
+call MOD_2;
 [PTBR + 6] = R0;
 [PTBR + 7] = "0110";
 
-R1 = GET_FREE_PAGE;
-call MEMORY_MANAGER;
+// Stack
+R1 = 1;
+call MOD_2;
 [PTBR + 16] = R0;
 [PTBR + 17] = "0110";
 
-R1 = GET_FREE_PAGE;
-call MEMORY_MANAGER;
+R1 = 1;
+call MOD_2;
 [PTBR + 18] = R0;
 [PTBR + 19] = "0110";
 
-code_size = [INODE_TABLE + 16 * inode_index + 2] / 512;
+multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+// Code
+alias numBlocks R10;
+alias i R11;
 
 i = 0;
-while (i <= code_size) do
-  R1 = GET_FREE_PAGE;
-  call MEMORY_MANAGER;
-  temp = PTBR + 8 + 2 * i;
-  [temp] = R0;
-  [temp + 1] = "0100";
-  i = i + 1;
-endwhile;
+numBlocks = (([INODE_TABLE + 16 * inodeEntry + 2] - 1) / 512) + 1;
+
+multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
 while (i < 4) do
-  temp = PTBR + 8 + 2 * i;
-  [temp] = -1;
-  [temp + 1] = "0000";
-  i = i + 1;
+    if (i < numBlocks) then
+        R1 = 1;
+        call MOD_2;
+        [PTBR + 8 + 2 * i] = R0;
+        [PTBR + 9 + 2 * i] = "0100";
+    else
+        [PTBR + 8 + 2 * i] = -1;
+        [PTBR + 9 + 2 * i] = "0000";
+    endif;
+    i = i + 1;
 endwhile;
 
-multipop(R0, R1, R2, R3, R4, R5);
+multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
 
 i = 0;
-while (i <= code_size) do
-  loadi([PTBR + 8 + i * 2], [INODE_TABLE + 16 * inode_index + 8 + i]);
-  i = i + 1;
+while (i < numBlocks) do
+    loadi([PTBR + 8 + 2 * i], [INODE_TABLE + inodeEntry * 16 + 8 + i]);
+    i = i + 1;
 endwhile;
 
 [[PTBR + 16] * 512] = [[PTBR + 8] * 512 + 1];
 
 SP = 8 * 512;
-[process_table + 9] = 0;
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
 
 ireturn;
