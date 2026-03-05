@@ -1,0 +1,9 @@
+alias counter R0;
+alias sqr R1;
+counter = 1;
+sqr = 0;
+while (counter <= 5) do
+  sqr = counter * counter;
+  counter = counter + 1;
+  print sqr;
+endwhile;

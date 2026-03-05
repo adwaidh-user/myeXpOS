@@ -1,0 +1,12 @@
+load --int=6 ../stages/stage16/int6.xsm
+load --int=7 ../stages/stage15/int7.xsm
+load --int=10 ../stages/stage14/int10.xsm
+load --int=timer ../stages/stage14/int_timer.xsm
+load --int=console ../stages/stage16/int_console.xsm
+load --module 0 ../stages/stage15/resource_manager_0.xsm
+load --module 4 ../stages/stage16/device_manager_4.xsm
+load --module 5 ../stages/stage14/scheduler_5.xsm
+load --module 7 ../stages/stage16/boot_7.xsm
+load --exhandler ../stages/stage14/exhandler.xsm
+load --os ../stages/stage13/os_startup.xsm
+load --library ../expl/library.lib

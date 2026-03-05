@@ -1,0 +1,4 @@
+load --int=10 ../stages/stage6/int10.xsm
+load --exhandler ../stages/stage6/int10.xsm
+load --os ../stages/stage6/os_startup.xsm
+load --init ../stages/stage6/squares.xsm

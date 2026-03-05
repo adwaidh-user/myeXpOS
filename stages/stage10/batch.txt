@@ -1,0 +1,7 @@
+load --int=7 ../stages/stage10/int7.xsm
+load --int=10 ../stages/stage6/int10.xsm
+load --int=timer ../stages/stage9/int_timer.xsm
+load --exhandler ../stages/stage6/int10.xsm
+load --os ../stages/stage10/os_startup.xsm
+load --init ../stages/stage10/init.xsm
+load --library ../expl/library.lib
