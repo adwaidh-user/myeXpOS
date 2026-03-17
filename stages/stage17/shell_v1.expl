@@ -10,7 +10,7 @@ int main() {
     x = exposcall("Exec", filename);
 
     breakpoint;
-    if (x == -1) then
+    if (x != 0) then
       filename = "NO_FILE";
       x = exposcall("Write", -1, filename);
     endif;

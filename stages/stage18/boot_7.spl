@@ -118,7 +118,7 @@ PTLR = 10;
 
 [76 * 512] = [65 * 512 + 1];
 
-// per-process table for init
+// per-process resource table for init
 i = 1;
 while (i < 9) do
   [([PROCESS_TABLE + 16 + 11] + 1) * 512 - 2 * i] = -1;
