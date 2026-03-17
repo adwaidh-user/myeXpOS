@@ -5,11 +5,11 @@ int main() {
   enddecl
 
   begin
-    breakpoint;
+    
     x = exposcall("Read", -1, filename);
     x = exposcall("Exec", filename);
 
-    breakpoint;
+    
     if (x != 0) then
       filename = "NO_FILE";
       x = exposcall("Write", -1, filename);

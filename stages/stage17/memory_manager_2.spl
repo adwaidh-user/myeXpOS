@@ -27,7 +27,7 @@ if (functionNumber == 1) then
     [MEMORY_FREE_LIST + memoryFreeIndex] = 1;
     
     R0 = memoryFreeIndex;
-    breakpoint;
+    
     return;
 endif;
 
@@ -52,6 +52,6 @@ if (functionNumber == 2) then
         endif;
         i = i + 1;
     endwhile;
-    breakpoint;
+    
     return;
 endif;

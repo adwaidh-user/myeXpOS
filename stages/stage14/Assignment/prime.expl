@@ -4,7 +4,7 @@ int main() {
   enddecl
   begin
     i = 2;
-    breakpoint;
+    
     while (i <= 97) do
       isPrime = 1;
       j = 2;
