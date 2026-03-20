@@ -1,0 +1,179 @@
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] = SP;
+
+alias userSP R0;
+userSP = SP;
+
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11] * 512 - 1;
+
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 9;
+
+
+alias physicalPageNumber R1;
+alias offset R2;
+alias physicalAddress R3;
+alias page_table R5;
+
+page_table = PAGE_TABLE_BASE + 20 * [SYSTEM_STATUS_TABLE + 1];
+
+
+physicalPageNumber = [page_table + 2 * ((userSP - 4) / 512)];
+offset = (userSP - 4) % 512;
+physicalAddress = physicalPageNumber * 512 + offset;
+
+alias fileName R6;
+fileName = [physicalAddress];
+
+alias inodeEntry R7;
+alias flag R8;
+
+inodeEntry = 0;
+flag = 0;
+
+while (inodeEntry < MAX_FILE_NUM) do
+    if (fileName == [INODE_TABLE + inodeEntry * 16 + 1]) then
+        if ([INODE_TABLE + inodeEntry * 16] == EXEC) then
+            flag = 1;
+            break;
+        endif;
+    endif;
+    inodeEntry = inodeEntry + 1;
+endwhile;
+
+if (flag == 0) then
+    physicalPageNumber = [page_table + 2 * ((userSP - 1) / 512)];
+    offset = (userSP - 1) % 512;
+    [physicalPageNumber * 512 + offset] = -1;
+    [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+    SP = userSP;
+    ireturn;
+endif;
+
+multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+
+R1 = GET_PCB_ENTRY;
+call PROCESS_MANAGER;
+alias newPID R8;
+
+newPID = R0;
+
+
+multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+//--------------------------------------
+if (newPID == -1) then
+  [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+  [[PTBR + 2 * ((userSP - 1)/512)] * 512 + (userSP - 1) % 512] = -1;
+  SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13];
+  ireturn;
+else
+  
+  alias newPTBR R9 ;
+  newPTBR = PAGE_TABLE_BASE + 20 * newPID;
+
+  multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+  
+  R1 = GET_FREE_PAGE;
+  call MEMORY_MANAGER;
+  [PROCESS_TABLE + newPID * 16 + 11] = R0;
+
+  [MEMORY_FREE_LIST + R0] = [MEMORY_FREE_LIST + R0] + 1;
+  [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
+
+  multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+  [PROCESS_TABLE + newPID * 16 + 0] = 0;
+  [PROCESS_TABLE + newPID * 16 + 4] = CREATED;
+  [PROCESS_TABLE + newPID * 16 + 7] = inodeEntry;
+  [PROCESS_TABLE + newPID * 16 + 9] = 0;
+  [PROCESS_TABLE + newPID * 16 + 12] = 0;
+  [PROCESS_TABLE + newPID * 16 + 13] = 8 * 512;
+
+  
+  // Allocating pages
+  // Library
+  [newPTBR + 0] = 63;
+  [newPTBR + 1] = "0100";
+  [newPTBR + 2] = 64;
+  [newPTBR + 3] = "0100";
+
+  // Heap
+  [newPTBR + 4] = -1;
+  [newPTBR + 5] = "0000";
+  [newPTBR + 6] = -1;
+  [newPTBR + 7] = "0000";
+
+  multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+  // Stack
+  R1 = GET_FREE_PAGE;
+  call MOD_2;
+  [newPTBR + 16] = R0;
+  [newPTBR + 17] = "0110";
+
+  R1 = GET_FREE_PAGE;
+  call MOD_2;
+  [newPTBR + 18] = R0;
+  [newPTBR + 19] = "0110";
+
+  
+  multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+  // Code
+  alias numBlocks R10;
+  alias i R11;
+
+  numBlocks = (([INODE_TABLE + 16 * inodeEntry + 2] - 1) / 512) + 1;
+
+  
+  // Initialize Disk Map table
+  i = 2;
+  while (i < 10) do
+      if (i < 4 || i > 8) then // Heap
+          [DISK_MAP_TABLE + newPID * 10 + i] = -1;
+      else
+        if (i - 4 < numBlocks) then // Code
+          [DISK_MAP_TABLE + newPID * 10 + i] = [INODE_TABLE + inodeEntry * 16 + 8 + (i - 4)];
+        else
+          [DISK_MAP_TABLE + newPID * 10 + i] = -1;
+        endif;
+      endif;
+      i = i + 1;
+  endwhile;
+
+  multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+  
+  R1 = GET_CODE_PAGE;
+  R2 = [INODE_TABLE + inodeEntry * 16 + 8];
+  call MEMORY_MANAGER;
+  [newPTBR + 8] = R0;
+  [newPTBR + 9] = "0100";
+
+  multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+  
+  i = 1;
+  while (i < 4) do
+    [newPTBR + 8 + 2 * i] = -1;
+    [newPTBR + 9 + 2 * i] = "0000";
+    i = i + 1;
+  endwhile;
+
+  
+  // per-process resource table initialization
+  i = 1;
+  while (i < 9) do
+    [([PROCESS_TABLE + newPID * 16 + 11] + 1) * 512 - 2 * i] = -1;
+    i = i + 1;
+  endwhile;
+
+  
+  [[newPTBR + 16] * 512] = [[newPTBR + 8] * 512 + 1];
+
+  [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+  [PROCESS_TABLE + newPID * 16 + 9] = 0;
+  SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13];
+endif;
+//--------------------------------------
+
+ireturn;

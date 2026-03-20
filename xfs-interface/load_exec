@@ -1,0 +1,8 @@
+load --exec ../stages/stage14/even.xsm
+load --exec ../stages/stage14/odd.xsm
+load --exec ../stages/stage14/Assignment/prime.xsm
+load --exec ../stages/stage16/gcd.xsm
+load --exec ../stages/stage16/bubsort.xsm
+load --exec ../stages/stage19/Assignment/l_list.xsm
+load --exec ../stages/stage21/Assignment2/fork3.xsm
+load --exec ../stages/stage21/Assignment2/pid.xsm
