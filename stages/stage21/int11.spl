@@ -1,30 +1,36 @@
 alias userSP R0;
+alias cur_proc_table R1;
+alias syscallNum R2;
+
 userSP = SP;
+cur_proc_table = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+syscallNum = [[PTBR + 2 * ((userSP - 5) / 512)] * 512 + ((userSP - 5) % 512)];
 
-[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] = SP;
-SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11] * 512 - 1;
+[cur_proc_table + 13] = SP;
+SP = [cur_proc_table + 11] * 512 - 1;
+[cur_proc_table + 9] = syscallNum;
 
-alias sysCallNumber R1;
-sysCallNumber = [[PTBR + 2 * ((userSP - 5) / 512)] * 512 + ((userSP - 5) % 512)];
-
-[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = sysCallNumber;
-
-if (sysCallNumber == 11) then // getpid
+//############## GET_PID #################
+if (syscallNum == INT_GETPID) then // getpid
     [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = [SYSTEM_STATUS_TABLE + 1];
 endif;
+//########################################
 
-if (sysCallNumber == 12) then // getppid
-    [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 2];
+//############## GET_PPID #################
+if (syscallNum == INT_GETPPID) then // getppid
+    [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = [cur_proc_table + 2];
 endif;
+//########################################
 
-if (sysCallNumber == 13) then // wait
-    alias pid R2;
+//############## WAIT #################
+if (syscallNum == INT_WAIT) then // wait
+    alias pid R3;
     pid = [[PTBR + 2 * ((userSP - 4) / 512)] * 512 + ((userSP - 4) % 512)];
     if (pid == [SYSTEM_STATUS_TABLE + 1] || [PROCESS_TABLE + pid * 16 + 4] == TERMINATED || pid < 0 || pid >= 16) then
         [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -1;
     else
-        [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 4] = WAIT_PROCESS;
-        [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 5] = pid;
+        [cur_proc_table + 4] = WAIT_PROCESS;
+        [cur_proc_table + 5] = pid;
 
         multipush(R0, R1, R2);
         call SCHEDULER;
@@ -33,20 +39,26 @@ if (sysCallNumber == 13) then // wait
         [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = 0;
     endif;
 endif;
+//########################################
 
-if (sysCallNumber == 14) then // signal
-    alias i R2;
+//############## SIGNAL #################
+if (syscallNum == INT_SIGNAL) then // signal
+    alias i R3;
+    alias proc_table R4;
+
     i = 0;
     while (i < 16) do
-        if ([PROCESS_TABLE + i * 16 + 4] == WAIT_PROCESS && [PROCESS_TABLE + i * 16 +5] == [SYSTEM_STATUS_TABLE + 1]) then
-            [PROCESS_TABLE + i * 16 + 4] = READY;
-            [PROCESS_TABLE + i * 16 + 5] = -1;
+        proc_table = PROCESS_TABLE + i * 16;
+        if ([proc_table + 4] == WAIT_PROCESS && [proc_table + 5] == [SYSTEM_STATUS_TABLE + 1]) then
+            [proc_table + 4] = READY;
+            [proc_table + 5] = -1;
         endif;
         i = i + 1;
     endwhile;
 endif;
+//########################################
 
 SP = userSP;
-[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+[cur_proc_table + 9] = 0;
 
 ireturn;

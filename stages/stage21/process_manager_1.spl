@@ -2,11 +2,14 @@ alias functionNumber R1;
 alias currentPID R2;
 
 // get pcb entry
-if (functionNumber == 1) then
+if (functionNumber == GET_PCB_ENTRY) then
     alias i R3;
+    alias process_table R4;
+
     i = 1;
     while (i < 16) do
-        if ([PROCESS_TABLE + i * 16 + 4] == TERMINATED) then
+        process_table = PROCESS_TABLE + i * 16;
+        if ([process_table + 4] == TERMINATED) then
             break;
         endif;
         i = i + 1;
@@ -14,64 +17,69 @@ if (functionNumber == 1) then
     if (i == 16) then
         R0 = -1;
     else
-        [PROCESS_TABLE + i * 16 + 4] = ALLOCATED;
-        [PROCESS_TABLE + i * 16 + 1] = i;
-        [PROCESS_TABLE + i * 16 + 14] = PAGE_TABLE_BASE + (20 * i);
-        [PROCESS_TABLE + i * 16 + 15] = 10;
+        [process_table + 4] = ALLOCATED;
+        [process_table + 1] = i;
+        [process_table + 14] = PAGE_TABLE_BASE + (20 * i);
+        [process_table + 15] = 10;
         R0 = i;
     endif;
     return;
 endif;
 
 // free user areaPage
-if (functionNumber == 2) then
-    alias userAreaPageNumber R3;
-    userAreaPageNumber = [PROCESS_TABLE + 16 * currentPID + 11];
-    multipush(R1, R2, R3);
-    R1 = 2;
-    R2 = userAreaPageNumber;
-    call MOD_2;
-    multipop(R1, R2, R3);
+if (functionNumber == FREE_USER_AREA_PAGE) then
+    multipush(R1, R2);
 
+    R1 = RELEASE_PAGE;
+    R2 = [PROCESS_TABLE + 16 * currentPID + 11];
+    call MEMORY_MANAGER;
+
+    multipop(R1, R2);
     return;
 endif;
 
 // exit process
-if (functionNumber == 3) then
+if (functionNumber == EXIT_PROCESS) then
     multipush(R1, R2);
 
     // to free page table
-    R1 = 4;
+    R1 = FREE_PAGE_TABLE;
     R2 = currentPID;
-    call MOD_1;
+    call PROCESS_MANAGER;
 
     // to free user area page
-    R1 = 2;
+    R1 = FREE_USER_AREA_PAGE;
     R2 = currentPID;
-    call MOD_1;
+    call PROCESS_MANAGER;
 
     multipop(R1, R2);
 
-    if ([PROCESS_TABLE + currentPID * 16 + 9] != 9) then // not invoked from exec
-        alias i R3;
+    alias cur_proc_table R3;
+    cur_proc_table = PROCESS_TABLE + currentPID * 16;
+
+    if ([cur_proc_table + 9] != 9) then // not invoked from exec
+        alias i R4;
+        alias process_table R5;
+
         i = 0;
         while (i < 16) do
-            if ([PROCESS_TABLE + i * 16 + 4] == WAIT_PROCESS && [PROCESS_TABLE + i * 16 + 5] == currentPID) then
-                [PROCESS_TABLE + i * 16 + 4] = READY;
+            process_table = PROCESS_TABLE + i * 16;
+            if ([process_table + 4] == WAIT_PROCESS && [process_table + 5] == currentPID) then
+                [process_table + 4] = READY;
             endif;
-            if ([PROCESS_TABLE + i * 16 + 2] == currentPID) then
-                [PROCESS_TABLE + i * 16 + 2] = -1;
+            if ([process_table + 2] == currentPID) then
+                [process_table + 2] = -1;
             endif;
             i = i + 1;
         endwhile;
     endif;
 
-    [PROCESS_TABLE + 16 * currentPID + 4] = TERMINATED;
+    [cur_proc_table + 4] = TERMINATED;
     return;
 endif;
 
 // free page table
-if (functionNumber == 4) then
+if (functionNumber == FREE_PAGE_TABLE) then
     [PTBR + 0] = -1;
     [PTBR + 1] = "0000";
     [PTBR + 2] = -1;
@@ -87,9 +95,9 @@ if (functionNumber == 4) then
             multipush(R1, R2, R3, R4);
 
             // to release page
-            R1 = 2;
+            R1 = RELEASE_PAGE;
             R2 = pageNumber;
-            call MOD_2;
+            call MEMORY_MANAGER;
 
             multipop(R1, R2, R3, R4);
 
@@ -99,21 +107,24 @@ if (functionNumber == 4) then
         i = i + 1;
     endwhile;
 
+    alias dmt_entry R4;
+    
     i = 2;
     while (i < 10) do
-        if ([DISK_MAP_TABLE + currentPID * 10 + i] != -1) then
+        dmt_entry = DISK_MAP_TABLE + currentPID * 10 + i;
+        if ([dmt_entry] != -1) then
             if (i < 4 || i > 7) then
                 multipush(R1, R2, R3, R4);
 
-                R1 = 4;
+                R1 = RELEASE_BLOCK;
                 R3 = currentPID;
-                R2 = [DISK_MAP_TABLE + currentPID * 10 + i];
+                R2 = [dmt_entry];
 
-                call MOD_2;
+                call MEMORY_MANAGER;
 
                 multipop(R1, R2, R3, R4);
             endif;
-            [DISK_MAP_TABLE + currentPID * 10 + i] = -1;
+            [dmt_entry] = -1;
         endif;
         i = i + 1;
     endwhile;
