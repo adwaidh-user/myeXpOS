@@ -63,21 +63,24 @@ if (functionNumber == FREE_PAGE_TABLE) then
         i = i + 1;
     endwhile;
 
+    alias dmt_entry R4;
+    
     i = 2;
     while (i < 10) do
-        if ([DISK_MAP_TABLE + currentPID * 10 + i] != -1) then
+        dmt_entry = DISK_MAP_TABLE + currentPID * 10 + i;
+        if ([dmt_entry] != -1) then
             if (i < 4 || i > 7) then
                 multipush(R1, R2, R3, R4);
 
-                R1 = 4;
+                R1 = RELEASE_BLOCK;
                 R3 = currentPID;
-                R2 = [DISK_MAP_TABLE + currentPID * 10 + i];
+                R2 = [dmt_entry];
 
-                call MOD_2;
+                call MEMORY_MANAGER;
 
                 multipop(R1, R2, R3, R4);
             endif;
-            [DISK_MAP_TABLE + currentPID * 10 + i] = -1;
+            [dmt_entry] = -1;
         endif;
         i = i + 1;
     endwhile;
