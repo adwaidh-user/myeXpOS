@@ -1,0 +1,12 @@
+print "----------";
+print "--stats---";
+print "----------";
+
+alias usage_counter R0;
+usage_counter = SYSTEM_STATUS_TABLE + 24;
+print "mem usage:";
+print [usage_counter];
+print "diskAccess:";
+print [usage_counter + 1];
+print "context switch:";
+print [usage_counter + 2];

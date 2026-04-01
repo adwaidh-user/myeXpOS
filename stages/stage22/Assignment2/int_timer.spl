@@ -1,0 +1,34 @@
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+
+backup;
+
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 4] = READY;
+
+alias i R0;
+alias proc_table_addr R1;
+
+alias prevMemUsage R2;
+prevMemUsage = SYSTEM_STATUS_TABLE + 24;
+if (128 - [SYSTEM_STATUS_TABLE + 2] > [prevMemUsage]) then 
+    [prevMemUsage] = 128 - [SYSTEM_STATUS_TABLE + 2];
+endif;
+
+i = 0;
+while (i < MAX_PROC_NUM) do
+  proc_table_addr = PROCESS_TABLE + 16 * i;
+  if ([proc_table_addr + 4] != TERMINATED) then
+    [proc_table_addr] = [proc_table_addr] + 1;
+  endif;
+  i = i + 1;
+endwhile;
+
+call MOD_5;
+
+restore;
+
+SP = [PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16 ) + 12] = 0;
+[PROCESS_TABLE + ( [SYSTEM_STATUS_TABLE + 1] * 16 ) + 9] = 0;
+
+ireturn;

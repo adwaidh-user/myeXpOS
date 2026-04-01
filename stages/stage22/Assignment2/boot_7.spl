@@ -1,0 +1,189 @@
+//############
+alias i R0;
+//############
+
+// exhandler
+loadi(2, 15);
+loadi(3, 16);
+
+// timer interrupt
+loadi(4, 17);
+loadi(5, 18);
+
+// disk interrupt
+loadi(6, 19);
+loadi(7, 20);
+
+// console interrupt
+loadi(8, 21);
+loadi(9, 22);
+
+// int 6 (read)
+loadi(14, 27);
+loadi(15, 28);
+
+// int 7 (write)
+loadi(16, 29);
+loadi(17, 30);
+
+// int 8 (fork)
+loadi(18, 31);
+loadi(19, 32);
+
+// int 9 (exec)
+loadi(20, 33);
+loadi(21, 34);
+
+// int 10 (exit)
+loadi(22, 35);
+loadi(23, 36);
+
+// int 11 (pid, signal, wait)
+loadi(24, 37);
+loadi(25, 38);
+
+// int 13 (semget, semrelease)
+loadi(28, 41);
+loadi(29, 42);
+
+// int 14 (semlock, semunlock)
+loadi(30, 43);
+loadi(31, 44);
+
+// int 15 (shutdown)
+loadi(32, 45);
+loadi(33, 46);
+
+// module 0
+loadi(40, 53);
+loadi(41, 54);
+
+// module 1
+loadi(42, 55);
+loadi(43, 56);
+
+// module 2
+loadi(44, 57);
+loadi(45, 58);
+
+// module 4
+loadi(48, 61);
+loadi(49, 62);
+
+// module 5
+loadi(50, 63);
+loadi(51, 64);
+
+// inode user table
+loadi(59, 3);
+loadi(60, 4);
+
+// disk free list
+loadi(61, 2);
+
+// Library
+loadi(63, 13);
+loadi(64, 14);
+
+// init
+loadi(65, 7);
+loadi(66, 8);
+
+i = 0;
+// non user progs use pages 0 - 75
+// init and idle progs use pages 76 - 82
+while (i < 83) do
+  [MEMORY_FREE_LIST + i] = 1;
+  i = i + 1;
+endwhile;
+while (i < 128) do
+  [MEMORY_FREE_LIST + i] = 0;
+  i = i + 1;
+endwhile;
+
+// ###########  INIT PROCESS  ##########
+
+PTBR = PAGE_TABLE_BASE + 20;
+PTLR = 10;
+
+[PTBR + 0] = 63;
+[PTBR + 1] = "0100";
+[PTBR + 2] = 64;
+[PTBR + 3] = "0100";
+[PTBR + 4] = 78;
+[PTBR + 5] = "0110";
+[PTBR + 6] = 79;
+[PTBR + 7] = "0110";
+[PTBR + 8] = 65;
+[PTBR + 9] = "0100";
+[PTBR + 10] = 66;
+[PTBR + 11] = "0100";
+[PTBR + 12] = -1;
+[PTBR + 13] = "0000";
+[PTBR + 14] = -1;
+[PTBR + 15] = "0000";
+[PTBR + 16] = 76;
+[PTBR + 17] = "0110";
+[PTBR + 18] = 77;
+[PTBR + 19] = "0110";
+
+alias process_table R1;
+process_table = PROCESS_TABLE + 16;
+[process_table + 1] = 1;
+[process_table + 4] = CREATED;
+[process_table + 11] = 80;
+[process_table + 12] = 0;
+[process_table + 13] = 8 * 512;
+[process_table + 14] = PTBR;
+[process_table + 15] = PTLR;
+[76 * 512] = [65 * 512 + 1];
+
+// per-process resource table for init
+i = 0;
+alias resource_table R1;
+resource_table = [PROCESS_TABLE + 16 + 11] * 512 + RESOURCE_TABLE_OFFSET;
+while (i < 8) do
+    [resource_table + 2 * i] = -1;
+    i = i + 1;
+endwhile;
+
+// disk map table initialization for init
+
+alias dmt R1;
+dmt = DISK_MAP_TABLE + 10;
+[dmt + 2] = -1;
+[dmt + 3] = -1;
+[dmt + 4] = 7;
+[dmt + 5] = 8;
+[dmt + 6] = -1;
+[dmt + 7] = -1;
+[dmt + 8] = -1;
+[dmt + 9] = -1;
+
+// initialization of semaphore table
+alias semtable_entry R1;
+i = 0;
+while (i < MAX_SEM_COUNT) do
+    semtable_entry = SEMAPHORE_TABLE + i * 4;
+    [semtable_entry] = -1;
+    [semtable_entry + 1] = 0;
+    i = i + 1;
+endwhile;
+
+i = 2;
+while (i < 16) do
+    [PROCESS_TABLE + 16 * i + 4] = TERMINATED;
+    i = i + 1;
+endwhile;
+
+[TERMINAL_STATUS_TABLE] = 0;
+[DISK_STATUS_TABLE] = 0;
+[SYSTEM_STATUS_TABLE + 0] = 1;
+[SYSTEM_STATUS_TABLE + 2] = 45;
+[SYSTEM_STATUS_TABLE + 3] = 0;
+//This is unnalloccated space in page
+[SYSTEM_STATUS_TABLE + 24] = 0; //Max memory usage
+[SYSTEM_STATUS_TABLE + 25] = 0; //number of disk access
+[SYSTEM_STATUS_TABLE + 26] = 0; //number of context switches
+
+return;
