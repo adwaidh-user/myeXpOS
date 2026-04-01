@@ -1,0 +1,64 @@
+alias userSP R0;
+alias syscallNum R1;
+alias retAddr R2;
+alias curProcTable R3;
+
+userSP = SP;
+curProcTable = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
+syscallNum = [[PTBR + (userSP - 5) / 512 * 2] * 512 + (userSP - 5) % 512];
+retAddr = [PTBR + (userSP - 1) / 512 * 2] * 512 + (userSP - 1) % 512;
+
+[curProcTable + 13] = userSP;
+SP = [curProcTable + 11] * 512 - 1;
+[curProcTable + 9] = syscallNum;
+
+if ([SYSTEM_STATUS_TABLE + 1] != 1 || [curProcTable + 3] != 1) then
+    [retAddr] = -1;
+
+    [curProcTable + 9] = 0;
+    SP = userSP;
+    ireturn;
+endif;
+
+// inode table
+multipush(R0, R1, R2, R3);
+    R1 = DISK_STORE;
+    R2 = [SYSTEM_STATUS_TABLE + 1];
+    R3 = 59;
+    R4 = 3;
+
+    call DEVICE_MANAGER;
+multipop(R0, R1, R2, R3);
+
+// user table
+multipush(R0, R1, R2, R3);
+    R1 = DISK_STORE;
+    R2 = [SYSTEM_STATUS_TABLE + 1];
+    R3 = 60;
+    R4 = 4;
+
+    call DEVICE_MANAGER;
+multipop(R0, R1, R2, R3);
+
+// disk free list
+multipush(R0, R1, R2, R3);
+    R1 = DISK_STORE;
+    R2 = [SYSTEM_STATUS_TABLE + 1];
+    R3 = 61;
+    R4 = 2;
+
+    call DEVICE_MANAGER;
+multipop(R0, R1, R2, R3);
+
+// root file
+multipush(R0, R1, R2, R3);
+    R1 = DISK_STORE;
+    R2 = [SYSTEM_STATUS_TABLE + 1];
+    R3 = 62;
+    R4 = 5;
+
+    call DEVICE_MANAGER;
+multipop(R0, R1, R2, R3);
+
+halt;

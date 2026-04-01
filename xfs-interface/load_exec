@@ -6,3 +6,6 @@ load --exec ../stages/stage16/bubsort.xsm
 load --exec ../stages/stage19/Assignment/l_list.xsm
 load --exec ../stages/stage21/Assignment2/fork3.xsm
 load --exec ../stages/stage21/Assignment2/pid.xsm
+load --exec ../stages/stage22/Assignment1/test4.xsm
+load --exec ../stages/stage23/Assignment1/touch.xsm
+load --exec ../stages/stage23/Assignment2/rm.xsm
