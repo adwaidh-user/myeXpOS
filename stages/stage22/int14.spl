@@ -1,0 +1,77 @@
+alias userSP R0;
+alias cur_process_table R1;
+alias syscallNum R2;
+
+userSP = SP;
+cur_process_table = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+syscallNum = [[PTBR + 2 * ((userSP - 5) / 512)] * 512 + ((userSP - 5) % 512)];
+
+[cur_process_table + 13] = userSP;
+SP = [cur_process_table + 11] * 512 - 1;
+[cur_process_table + 9] = syscallNum;
+
+alias resourceID R3;
+alias resource_table_entry R4;
+
+resourceID = [[PTBR + 2 * ((userSP - 4) / 512)] * 512 + ((userSP - 4) % 512)];
+resource_table_entry = [cur_process_table + 11] * 512 + RESOURCE_TABLE_OFFSET + resourceID * 2;
+
+if (resourceID < 0 || resourceID > 7 || [resource_table_entry] != SEMAPHORE) then
+    [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -1;
+    [cur_process_table + 9] = 0;
+    SP = [cur_process_table + 13];
+    ireturn;
+endif;
+
+alias semID R3;
+semID = [resource_table_entry + 1];
+alias semtable_entry R4;
+semtable_entry = SEMAPHORE_TABLE + semID * 4;
+
+if (syscallNum == INT_SEMLOCK) then
+    while ([semtable_entry] != -1 && [semtable_entry] != [SYSTEM_STATUS_TABLE + 1]) do
+        [cur_process_table + 4] = WAIT_SEMAPHORE;
+        [cur_process_table + 5] = semID;
+
+        multipush(R0, R1, R2, R3, R4);
+        call SCHEDULER;
+        multipop(R0, R1, R2, R3, R4);
+    endwhile;
+
+    [semtable_entry] = [SYSTEM_STATUS_TABLE + 1];
+    [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = 0;
+endif;
+
+if (syscallNum == INT_SEMUNLOCK) then
+    if ([semtable_entry] != -1) then
+        if ([semtable_entry] != [SYSTEM_STATUS_TABLE + 1]) then
+            [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -2;
+            [cur_process_table + 9] = 0;
+            SP = [cur_process_table + 13];
+            ireturn;
+        endif;
+
+        [semtable_entry] = -1;
+
+        alias i R5;
+        alias process_table R6;
+        alias curPID R7;
+
+        i = 1;
+        curPID = [SYSTEM_STATUS_TABLE + 1];
+        while (i < MAX_PROC_NUM) do
+            process_table = PROCESS_TABLE + i * 16;
+            if ([process_table + 5] == semID && [process_table + 4] == WAIT_SEMAPHORE) then
+                [process_table + 4] = READY;
+                [process_table + 5] = -1;
+            endif;
+            i = i + 1;
+        endwhile;
+    endif;
+    [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = 0;
+endif;
+
+[cur_process_table + 9] = 0;
+SP = [cur_process_table + 13];
+
+ireturn;

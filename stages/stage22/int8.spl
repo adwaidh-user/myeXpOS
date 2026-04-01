@@ -1,0 +1,130 @@
+alias currProcessTable R0;
+alias userSP R1;
+currProcessTable = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+userSP = SP;
+// step 1 : set mode flag and switch to kernel stack
+[currProcessTable + 13] = SP; // saving user stack 
+[currProcessTable + 9] = 8; // mode flag
+SP = [currProcessTable + 11] * 512 - 1; // kernel stack pointer
+
+// step 2 : call Get PCB Entry function in Process Manager which returns index of free PCB Entry
+alias PCBindex R2;
+multipush(R0, R1);
+R1 = GET_PCB_ENTRY;
+call PROCESS_MANAGER;
+PCBindex = R0;
+multipop(R0, R1);
+
+alias retAddr R3;
+retAddr = [PTBR + (userSP - 1) / 512 * 2] * 512 + ((userSP - 1) % 512);
+// if no more entries are possible Get PCB entry returns -1
+if (PCBindex == -1) then
+    [retAddr] = -1; // forks given -1 if it fails
+    [currProcessTable + 9] = 0; // reset mode flag
+    SP = [currProcessTable + 13]; // change to user stack pointer
+    ireturn;
+endif;
+
+// step 3 : allocate heap pages for parent process if heap pages havent been allocated yet
+if ([PTBR + 4] == -1 && [PTBR + 6] == -1) then
+    multipush(R0, R1, R2, R3);
+    R1 = GET_FREE_PAGE;
+    call MEMORY_MANAGER;
+    [PTBR + 4] = R0;
+    [PTBR + 5] = "0110";
+    R1 = GET_FREE_PAGE;
+    call MEMORY_MANAGER;
+    [PTBR + 6] = R0;
+    [PTBR + 7] = "0110";
+    multipop(R0, R1, R2, R3);
+endif;
+
+// step 4 : allocate 2 stack pages and user area page for the new child process
+multipush(R0, R1, R2, R3);
+
+// pages for stack
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PAGE_TABLE_BASE + PCBindex * 20 + 16] = R0;
+[PAGE_TABLE_BASE + PCBindex * 20 + 17] = "0110";
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PAGE_TABLE_BASE + PCBindex * 20 + 18] = R0;
+[PAGE_TABLE_BASE + PCBindex * 20 + 19] = "0110";
+
+// page for user area page
+R1 = GET_FREE_PAGE;
+call MEMORY_MANAGER;
+[PROCESS_TABLE + PCBindex * 16 + 11] = R0;
+multipop(R0, R1, R2, R3);
+
+// step 5 : initalizing process table for child process 
+// entries which are same for both child and parent process
+[PROCESS_TABLE + PCBindex * 16 + 1] = PCBindex;
+[PROCESS_TABLE + PCBindex * 16 + 3] = [currProcessTable + 3]; // user id of user will be same for both child and parent process 
+[PROCESS_TABLE + PCBindex * 16 + 6] = [currProcessTable + 6]; // swap flag will be same 
+[PROCESS_TABLE + PCBindex * 16 + 7] = [currProcessTable + 7]; // inode index will be same  
+[PROCESS_TABLE + PCBindex * 16 + 10] = [currProcessTable + 10]; // user area swap status will be same 
+[PROCESS_TABLE + PCBindex * 16 + 13] = [currProcessTable + 13]; // UPTR will be same  
+
+// entries which are set since the child process will start executing in user mode later 
+[PROCESS_TABLE + PCBindex * 16 + 0] = 0; // tick will be 0  
+[PROCESS_TABLE + PCBindex * 16 + 9] = 0; // mode flag will be 0
+[PROCESS_TABLE + PCBindex * 16 + 12] = 0; // KPTR will be 0 (parent and child doesnt have same kernel stack)
+
+// entries derived from parent
+[PROCESS_TABLE + PCBindex * 16 + 2] = [currProcessTable + 1]; // child ppid will be parents pid
+[PROCESS_TABLE + PCBindex * 16 + 4] = CREATED; // state of child will be created
+
+// per process resource table for later
+alias iter R4;
+iter = 0;
+while (iter < 8) do
+    [[PROCESS_TABLE + PCBindex * 16 + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2] = [[currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2];
+    [[PROCESS_TABLE + PCBindex * 16 + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2 + 1] = [[currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2 + 1];
+
+    if ([[currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2] == SEMAPHORE) then
+        [SEMAPHORE_TABLE + [[currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2 + 1] * 4 + 1] = [SEMAPHORE_TABLE + [[currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + iter * 2 + 1] * 4 + 1] + 1; 
+    endif;
+
+    iter = iter + 1;
+endwhile;
+
+// Step 7 : coping disk map table of parent process for child process
+iter = 0;
+
+while (iter < 10) do
+    [DISK_MAP_TABLE + PCBindex * 10 + iter] = [DISK_MAP_TABLE + [SYSTEM_STATUS_TABLE + 1] * 10 + iter];
+    iter = iter + 1;
+endwhile;
+
+// Step 8 : copying page table(library, heap, code) of parent process
+iter = 0;
+while (iter < 16) do
+    [PAGE_TABLE_BASE + PCBindex * 20 + iter] = [PTBR + iter];
+    if (iter % 2 == 0) then
+        [MEMORY_FREE_LIST + [PTBR + iter]] = [MEMORY_FREE_LIST + [PTBR + iter]] + 1;
+    endif;
+
+    iter = iter + 1;
+endwhile;
+
+// Step 9 : copying content of user stack of parent to child stack
+iter = 0;
+while (iter < 512) do
+    [[PAGE_TABLE_BASE + PCBindex * 20 + 16] * 512 + iter] = [[PTBR + 16] * 512 + iter];
+    [[PAGE_TABLE_BASE + PCBindex * 20 + 18] * 512 + iter] = [[PTBR + 18] * 512 + iter];
+    iter = iter + 1;
+endwhile;
+
+// Step 10 : store value of BP register on top of kernel stack of child process, this is used by the scheduler when child process is scheduled for teh first time
+[[PROCESS_TABLE + PCBindex * 16 + 11] * 512] = BP;
+
+// Step 11 : return value of fork syscall, for parent -> PID of child, for child -> 0
+[retAddr] = PCBindex; // for parent
+[[PAGE_TABLE_BASE + PCBindex * 20  + (userSP - 1) / 512 * 2] * 512 + ((userSP - 1) % 512)] = 0; // for child
+
+// Step 12 : reset mode flag, switch to userstack of parent and iret
+[currProcessTable + 9] = 0;
+SP = [currProcessTable + 13];
+ireturn;

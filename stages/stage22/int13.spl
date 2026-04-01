@@ -1,0 +1,76 @@
+alias userSP R0;
+alias process_table R1;
+alias syscallNum R2;
+
+userSP = SP;
+process_table = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
+[process_table + 13] = userSP;
+SP = [process_table + 11] * 512 - 1;
+
+syscallNum = [[PTBR + 2 * ((userSP - 5) / 512)] * 512 + ((userSP - 5) % 512)];
+[process_table + 9] = syscallNum;
+
+if (syscallNum == INT_SEMGET) then
+    alias resourceID R3;
+    alias resource_table R4;
+
+    resourceID = 0;
+    resource_table = [process_table + 11] * 512 + RESOURCE_TABLE_OFFSET;
+    while (resourceID < 8 && [resource_table + resourceID * 2] != -1) do
+        resourceID = resourceID + 1;
+    endwhile;
+
+    if (resourceID == 8) then
+        [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -1;
+    else
+        multipush(R0, R1, R2, R3, R4);
+
+        R1 = ACQUIRE_SEMAPHORE;
+        R2 = [SYSTEM_STATUS_TABLE + 1];
+        call RESOURCE_MANAGER;
+
+        alias semID R5;
+        semID = R0;
+
+        multipop(R0, R1, R2, R3, R4);
+
+        if (semID == -1) then
+            [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -2;
+        else
+            [resource_table + resourceID * 2] = SEMAPHORE;
+            [resource_table + resourceID * 2 + 1] = semID;
+            [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = resourceID;
+        endif;
+    endif;
+endif;
+
+if (syscallNum == INT_SEMRELEASE) then
+    alias resourceID R3;
+    alias resource_table_entry R4;
+
+    resourceID = [[PTBR + 2 * ((userSP - 4) / 512)] * 512 + ((userSP - 4) % 512)];
+    resource_table_entry = [process_table + 11] * 512 + RESOURCE_TABLE_OFFSET + resourceID * 2;
+
+    if (resourceID < 0 || resourceID > 7 || [resource_table_entry] != SEMAPHORE) then
+        [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = -1;
+    else
+        multipush(R0, R1, R2, R3, R4);
+        
+        R1 = RELEASE_SEMAPHORE;
+        R2 = [resource_table_entry + 1];
+        R3 = [SYSTEM_STATUS_TABLE + 1];
+        call RESOURCE_MANAGER;
+
+        multipop(R0, R1, R2, R3, R4);
+
+        [resource_table_entry] = -1;
+        [resource_table_entry + 1] = -1;
+        [[PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512)] = 0;
+    endif;
+endif;
+
+[process_table + 9] = 0;
+SP = [process_table + 13];
+
+ireturn;

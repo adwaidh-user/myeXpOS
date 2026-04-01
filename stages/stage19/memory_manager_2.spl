@@ -1,114 +1,105 @@
-alias functionNumber R1;
+alias retval R0;
+alias functionNum R1;
+alias arg1 R2;
 
-// get free page
-if (functionNumber == GET_FREE_PAGE) then
-    // increment wait_mem_count
+// no arguments, ret = Page Number
+if (functionNum == GET_FREE_PAGE) then
+    // increment wait mem count in system status table
     [SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] + 1;
 
+    // if mem free count = 0, i.e no more free pages are available
     while ([SYSTEM_STATUS_TABLE + 2] == 0) do
-        [PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 4] = WAIT_MEM;
-
-        multipush(R1);
+        [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 4] = WAIT_MEM;
+        multipush(R0, R1, R2);
         call SCHEDULER;
-        multipop(R1);
+        multipop(R0, R1, R2);
     endwhile;
 
-    // decrement wait_mem_count
+    // decrement wait count
     [SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] - 1;
+    // decrement free count
     [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
-    
-    alias memoryFreeIndex R2;
-    // since available pages for user processes are from 76 to 127
-    memoryFreeIndex = 76;
 
-    while (([MEMORY_FREE_LIST + memoryFreeIndex] > 0) && (memoryFreeIndex < 128)) do
-        memoryFreeIndex = memoryFreeIndex + 1;
+    alias iter R3;
+    iter = 0;
+    while (iter < 128) do
+        if ([MEMORY_FREE_LIST + iter] == 0) then
+            retval = iter;
+            [MEMORY_FREE_LIST + iter] = 1;
+            break;
+        endif;
+        iter = iter + 1;
     endwhile;
 
-    [MEMORY_FREE_LIST + memoryFreeIndex] = 1;
-    
-    R0 = memoryFreeIndex;
     return;
 endif;
 
-// release page number
-if (functionNumber == 2) then
-    alias pageNumber R2;
-
-    // decrement num of process using this page
-    [MEMORY_FREE_LIST + pageNumber] = [MEMORY_FREE_LIST + pageNumber] - 1;
-
-    if ([MEMORY_FREE_LIST + pageNumber] == 0) then
-        // increment memory free count
+// arg1 = Page Number
+if (functionNum == RELEASE_PAGE) then
+    [MEMORY_FREE_LIST + arg1] = [MEMORY_FREE_LIST + arg1] - 1;
+    if ([MEMORY_FREE_LIST + arg1] == 0) then
         [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] + 1;
     endif;
 
-    alias i R3;
-    i = 1;
-
-    while (i < 16) do
-        if ([PROCESS_TABLE + 16 * i + 4] == WAIT_MEM) then
-            [PROCESS_TABLE + 16 * i + 4] = READY;
+    alias iter R3;
+    iter = 0;
+    while (iter < 16) do
+        if ([PROCESS_TABLE + iter * 16 + 4] == WAIT_MEM) then
+            [PROCESS_TABLE + iter * 16 + 4] = READY;
         endif;
-        i = i + 1;
+        iter = iter + 1;
     endwhile;
+
     return;
 endif;
 
-// Release Block 
-if (functionNumber == 4) then
-    alias blockNumber R2;
-    alias currentPID R3;
+// arg1 = Block Number, arg2 = PID
+if (functionNum == RELEASE_BLOCK) then
+    [DISK_FREE_LIST + arg1] = [DISK_FREE_LIST + arg1] - 1;
 
-    [DISK_FREE_LIST + blockNumber] = [DISK_FREE_LIST + blockNumber] - 1;
-    return;
+    return; 
 endif;
 
-// Get Code page
-if (functionNumber == 5) then
-    alias blockNumber R2;
-    alias i R3;
-    alias j R4;
-    alias pageNumber R5;
+// arg1 = Block Number, ret = Page Number
+if (functionNum == GET_CODE_PAGE) then
+    // step 1 : if the block number is already used by a page then we can reuse that page and return it
+    // for this we iter through every code page in disk map table, and check if the arg1 block number is used anywhere
+    // if its used then we find the corresponding page number through the page table of that process
+    alias iter1 R3;
+    alias iter2 R4;
+    iter1 = 0;
+    iter2 = 4;
 
-    i = 0;
-    while (i < 15) do
-        j = 4;
-        while (j < 8) do
-            if ([DISK_MAP_TABLE + 10 * i + j] == blockNumber) then
-                pageNumber = [PAGE_TABLE_BASE + 20 * i + 8 + 2 * (j - 4)];
-                if (pageNumber != -1) then
-                    [MEMORY_FREE_LIST + pageNumber] = [MEMORY_FREE_LIST + pageNumber] + 1;
-                    R0 = pageNumber;
+    while (iter1 < 16) do // iter1 is used to iterate the 16 disk map table entries
+        while (iter2 < 8) do // iter2 is used for iterating code page entry in disk map table i.e 4, 5, 6, 7
+            if ([DISK_MAP_TABLE + iter1 * 10 + iter2] == arg1) then
+                retval = [PAGE_TABLE_BASE + 20 * iter1 + iter2 * 2];
+                if (retval != -1) then
+                    [MEMORY_FREE_LIST + retval] = [MEMORY_FREE_LIST + retval] + 1;
                     return;
                 endif;
             endif;
-            j = j + 1;
+
+            iter2 = iter2 + 1;
         endwhile;
-        i = i + 1;
+
+        iter1 = iter1 + 1;
+        iter2 = 4;
     endwhile;
 
-    multipush(R1, R2);
-    
-    R1 = 1;
-    call MOD_2;
+    // step 2 : if arg1 block number is not used by any process then we have to load 
+    multipush(R1, R2, R3, R4);
+    functionNum = GET_FREE_PAGE;
+    call MEMORY_MANAGER; // retval (R0) will now contain a free Page
+    multipop(R1, R2, R3, R4);
 
-    pageNumber = R0;
-
-    multipop(R1, R2);
-
-    multipush(R1, R2, R5);
-
-    R1 = 2;
-    R4 = blockNumber;
-    R2 = [SYSTEM_STATUS_TABLE + 1];
-    R3 = pageNumber;
-    call MOD_4;
-
-    multipop(R1, R2, R5);
-
-    R0 = pageNumber;
-    breakpoint;
+    multipush(R0, R1, R2, R3, R4);
+    functionNum = DISK_LOAD;
+    // alias arg1 R2; already declared 
+    R4 = arg1; // arg1 initially holds the block number
+    R3 = retval;
+    arg1 = [SYSTEM_STATUS_TABLE + 1];  
+    call DEVICE_MANAGER;
+    multipop(R0, R1, R2, R3, R4);
     return;
 endif;
-    

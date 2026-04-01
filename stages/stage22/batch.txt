@@ -1,0 +1,23 @@
+load --int=6 ../stages/stage16/int6.xsm
+load --int=7 ../stages/stage15/int7.xsm
+load --int=8 ../stages/stage22/int8.xsm
+load --int=9 ../stages/stage19/int9.xsm
+load --int=10 ../stages/stage20/int10.xsm
+load --int=11 ../stages/stage21/int11.xsm
+load --int=13 ../stages/stage22/int13.xsm
+load --int=14 ../stages/stage22/int14.xsm
+load --int=15 ../stages/stage21/int15.xsm
+load --int=timer ../stages/stage14/int_timer.xsm
+load --int=disk ../stages/stage18/int_disk.xsm
+load --int=console ../stages/stage16/int_console.xsm
+load --module 0 ../stages/stage22/resource_manager_0.xsm
+load --module 1 ../stages/stage22/process_manager_1.xsm
+load --module 2 ../stages/stage19/memory_manager_2.xsm
+load --module 4 ../stages/stage18/device_manager_4.xsm
+load --module 5 ../stages/stage20/scheduler_5.xsm
+load --module 7 ../stages/stage22/boot_7.xsm
+load --exhandler ../stages/stage19/exhandler.xsm
+load --os ../stages/stage13/os_startup.xsm
+load --library ../expl/library.lib
+load --idle ../stages/stage12/idle.xsm
+load --init ../stages/stage21/Assignment1/shell2.xsm

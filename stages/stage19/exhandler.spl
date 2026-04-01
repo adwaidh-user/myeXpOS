@@ -1,84 +1,87 @@
-breakpoint;
+// step 1 : set mode flag to -1 indicating process is exhandler
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = -1;
 
-alias process_table_entry R1;
-
-process_table_entry = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
-
-[process_table_entry + 9] = -1;
-[process_table_entry + 13] = SP;
-SP = [process_table_entry + 11] * 512 - 1;
-
+// step 2 : switch to kernel stack, backup and push EIP onto stack
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] = SP;
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11] * 512 - 1;
 backup;
-
 multipush(EIP);
 
-if ((EC != 0) || ([process_table_entry + 13] == (PTLR * 512 - 1))) then
-    if (EC == 0) then
-        print "Stack overflow";
+
+alias error R0;
+// step 3 : if exception is not page fault or if stack is full, then print meaningful error mssg, then exit process and invoke scheduler
+if (EC != 0 || [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] == PTLR * 512 - 1) then
+
+    if ([PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] == PTLR * 512 - 1 && EC == 0) then
+        error = "Stack Full";
     else
         if (EC == 1) then
-            print "Illegal instruction";
-        else
-            if (EC == 2) then
-                print "Illegal memory access";
-            else
-                print "Arithmetic Exception";
-            endif;
+            error = "Ill Instr";
+        endif;
+
+        if (EC == 2) then
+            error = "Ill Mem Acc";
+        endif;
+
+        if (EC == 3) then
+            error = "Arthr Excep";
         endif;
     endif;
 
-    multipush(R0);
+    print error;
+    print [SYSTEM_STATUS_TABLE + 1];
 
-    R1 = EXIT_PROCESS;
-    R2 = [SYSTEM_STATUS_TABLE + 1];
+    alias functionNum R0;
+    alias arg1 R1;
+    functionNum = EXIT_PROCESS;
+    arg1 = [SYSTEM_STATUS_TABLE + 1];
     call PROCESS_MANAGER;
 
     call SCHEDULER;
-
-    multipop(R0);
-else
-    if (EPN > 3 && EPN < 8) then // code page
-        alias page_table_entry R2;
-        page_table_entry = PAGE_TABLE_BASE + [SYSTEM_STATUS_TABLE + 1] * 20;
-
-        multipush(R0, R1, R2, EPN);
-
-        R1 = GET_CODE_PAGE;
-        R2 = [DISK_MAP_TABLE + [SYSTEM_STATUS_TABLE + 1] * 10 + EPN];
-        call MEMORY_MANAGER;
-
-        multipop(R2, EPN);
-        [page_table_entry + 2 * EPN] = R0;
-        [page_table_entry + 2 * EPN + 1] = "1100";
-
-        multipop(R0, R1);
-    else
-        // Heap page
-        multipush(R0, R1);
-
-        R1 = GET_FREE_PAGE;
-        call MEMORY_MANAGER;
-        [PTBR + 4] = R0;
-        [PTBR + 5] = "1110";
-
-        R1 = GET_FREE_PAGE;
-        call MEMORY_MANAGER;
-        [PTBR + 6] = R0;
-        [PTBR + 7] = "1110";
-
-        multipop(R0, R1);
-    endif;
 endif;
 
-[process_table_entry + 9] = 0;
+if (EC == 0) then
+    error = "Page Fault";
+    print error;
+endif;
 
+// step 4 : Exhandler called due to page fault, find corresponding code block in disk map table and call get code page, setup corresponding page table
+if (EPN == 4 || EPN == 5 || EPN == 6 || EPN == 7) then
+    alias retval R0;
+    alias functionNum R1;
+    alias arg1 R2;
+    functionNum = GET_CODE_PAGE;
+    arg1 = [DISK_MAP_TABLE + [SYSTEM_STATUS_TABLE + 1] * 10 + (EPN - 4) + 4];
+    call MEMORY_MANAGER;
+
+    [PTBR + EPN * 2] = retval;
+    [PTBR + EPN * 2 + 1] = "1100";
+endif;
+
+// step 5 : if its due to heap, then allocate 2 heap pages using get free page and setup corresponding page table
+if (EPN == 2 || EPN == 3) then
+    alias retval R0;
+    alias functionNum R1;
+    functionNum = GET_FREE_PAGE;
+    
+    call MEMORY_MANAGER;
+    [PTBR + 4] = retval;
+    [PTBR + 5] = "1110";
+
+    call MEMORY_MANAGER;
+    [PTBR + 6] = retval;
+    [PTBR + 7] = "1110";
+endif;
+
+// step 6 : reset mode flag and pop EIP from stack
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
 multipop(EIP);
-
 restore;
 
-SP = [process_table_entry + 13];
+// step 7 : change to user stack and return to address in EIP
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13];
 SP = SP + 1;
 
-[[PTBR + 2 * (SP / 512)] * 512 + (SP % 512)] = EIP;
+[[PTBR + (SP / 512) * 2] * 512 + (SP % 512)] = EIP;
 
 ireturn;
