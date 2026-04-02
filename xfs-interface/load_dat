@@ -1,0 +1,2 @@
+load --data ../stages/stage24/Assignment1/sample.dat
+load --data ../stages/stage24/Assignment1/numbers.dat

@@ -1,0 +1,155 @@
+alias userSP R0;
+alias syscallNum R1;
+alias retAddr R2;
+alias currProcessTable R3;
+alias iter R4;
+
+userSP = SP;
+currProcessTable = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
+// step 1 : extract syscall number, address where ret val has to go to
+retAddr = [PTBR + (userSP - 1) / 512 * 2] * 512 + (userSP - 1) % 512;
+syscallNum = [[PTBR + (userSP - 5) / 512 * 2] * 512 + (userSP - 5) % 512];
+
+// step 2 : switch to kernel stack
+[currProcessTable + 13] = userSP;
+SP = [currProcessTable + 11] * 512 - 1;
+
+// step 3 : set mode flag
+[currProcessTable + 9] = syscallNum;
+ 
+alias fileDescriptor R5;
+alias buffer R6;
+
+fileDescriptor = [[PTBR + (userSP - 4) / 512 * 2] * 512 + (userSP - 4) % 512];
+buffer = [[PTBR + (userSP - 3) / 512 * 2] * 512 + (userSP - 3) % 512];
+
+// file case
+if (fileDescriptor != -1) then
+	// buffer contains logical addr of variable which should get the read value
+	// in terminal read its converted in the function call
+	// but here we have to do it ourselves
+	buffer = [PTBR + buffer / 512 * 2] * 512 + buffer % 512;
+
+	// invalid fileDescriptor
+	if (fileDescriptor < 0 || fileDescriptor > 7) then
+		[retAddr] = -1;
+		goto END;
+	endif; 
+
+    alias RTStart R7;
+
+    RTStart = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET;
+	
+	if ([RTStart + fileDescriptor * 2 + 0] != FILE) then
+		[retAddr] = -1;
+		goto END;
+	endif;
+	
+	// get open file table index
+	alias ofTableEntry R8;
+	ofTableEntry = [RTStart + fileDescriptor * 2 + 1];
+
+	// get inode index from open file table
+	alias inodeIndex R9;
+	inodeIndex = [OPEN_FILE_TABLE + ofTableEntry * 4 + 0];
+
+	// acquire lock by calling acquire inode
+	multipush(R1, R2, R3, R4, R5, R6, R7, R8, R9);
+	R1 = ACQUIRE_INODE;
+	R2 = inodeIndex;
+	R3 = [SYSTEM_STATUS_TABLE + 1]; 
+	call RESOURCE_MANAGER;
+	// return value of acquire inode will be saved in R0 (userSP overwritten, fine since we dont use it again anymore)
+	multipop(R1, R2, R3, R4, R5, R6, R7, R8, R9);
+
+	if (R0 == -1) then
+		[retAddr] = -1;
+		goto END;
+	endif;
+
+	// get lseek from open file table
+	alias lseekPOS R10;
+	lseekPOS = [OPEN_FILE_TABLE + ofTableEntry * 4 + 2];
+
+	if ([OPEN_FILE_TABLE + ofTableEntry * 4 + 0] == INODE_ROOT) then
+		// 480 = root file size
+		if (lseekPOS == 480) then
+			[retAddr] = -2;
+
+		else 
+			[buffer] = [ROOT_FILE + lseekPOS];
+
+			// increment lseek
+			[OPEN_FILE_TABLE + ofTableEntry * 4 + 2] = [OPEN_FILE_TABLE + ofTableEntry * 4 + 2] + 1;
+			[retAddr] = 0;
+
+		endif;
+		multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+		R1 = RELEASE_INODE;
+		R2 = inodeIndex;
+		R3 = [SYSTEM_STATUS_TABLE + 1];
+
+		call RESOURCE_MANAGER;
+		multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+
+		goto END;
+
+	else
+		if (lseekPOS == [INODE_TABLE + inodeIndex * 16 + 2]) then
+			[retAddr] = -2;
+
+			multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+			R1 = RELEASE_INODE;
+			R2 = inodeIndex;
+			R3 = [SYSTEM_STATUS_TABLE + 1];
+
+			call RESOURCE_MANAGER;
+			multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+
+			goto END;
+		endif;
+
+		multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+		R1 = BUFFERED_READ;
+		R2 = [INODE_TABLE + inodeIndex * 16 + 8 + lseekPOS / 512]; // disk block
+		R3 = lseekPOS % 512; // offset
+		R4 = buffer;
+
+		call FILE_MANAGER;
+		multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+
+		// increment lseek count
+		[OPEN_FILE_TABLE + ofTableEntry * 4 + 2] = [OPEN_FILE_TABLE + ofTableEntry * 4 + 2] + 1;
+
+
+		multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+		R1 = RELEASE_INODE;
+		R2 = inodeIndex;
+		R3 = [SYSTEM_STATUS_TABLE + 1];
+
+		call RESOURCE_MANAGER;
+		multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+
+		[retAddr] = 0;
+	endif;
+
+// terminal case
+else
+	// push all the registers we used 
+	multipush(R0, R1, R2, R3, R4, R5);
+	// setting arguements for terminal write
+	R1 = TERMINAL_READ; //function code
+	R2 = [SYSTEM_STATUS_TABLE + 1]; // currentPID
+	R3 = buffer; // address of word where the input will be taken
+
+	call DEVICE_MANAGER;
+    multipop(R0, R1, R2, R3, R4, R5);
+
+    [retAddr] = 0;
+endif;
+
+END:
+[currProcessTable + 9] = 0;
+SP = [currProcessTable + 13];
+ireturn;

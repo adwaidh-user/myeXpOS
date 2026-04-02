@@ -1,0 +1,131 @@
+alias userSP R0;
+alias syscallNum R1;
+alias retAddr R2;
+alias currProcessTable R3;
+alias iter R4;
+
+userSP = SP;
+currProcessTable = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
+// step 1 : extract syscall number, address where ret val has to go to
+retAddr = [PTBR + (userSP - 1) / 512 * 2] * 512 + (userSP - 1) % 512;
+syscallNum = [[PTBR + (userSP - 5) / 512 * 2] * 512 + (userSP - 5) % 512];
+
+// step 2 : switch to kernel stack
+[currProcessTable + 13] = userSP;
+SP = [currProcessTable + 11] * 512 - 1;
+
+// step 3 : set mode flag
+[currProcessTable + 9] = syscallNum;
+
+// open : arguements(filename)
+// return file descriptor : for sucess
+// return -1 : file not found / file is not data or root
+// return -2 : system has reached limit of open files
+// return -3 : process has reached limit of resources
+if (syscallNum == INT_OPEN) then
+    // alias i used : 
+    // R5 -> fileName (stores fileName from arguements)
+    // R6 -> RTStart (basically an offset to current processes resource table)
+    // R7 -> RTentry (index of the resource table which can be allocated) (also called as fileDescriptor)
+    // R8 -> ofTableEntry (index of open file table which can be allocated)
+
+    alias fileName R5;
+    alias RTStart R6;
+
+    fileName = [[PTBR + (userSP - 4) / 512 * 2] * 512 + (userSP - 4) % 512];
+    RTStart = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET;
+
+    // find a free resource table entry
+    iter = 0;
+    while (iter < 8) do
+        if ([RTStart + iter * 2 + 0] == -1) then
+            break;
+        endif;    
+
+        iter = iter + 1;    
+    endwhile;
+
+    alias RTentry R7;
+    RTentry = iter;
+
+    // process has max no of resources allocated already
+    if (iter == 8) then
+        [retAddr] = -3;
+        goto END;
+    endif;
+
+    alias ofTableEntry R8;
+    // call open function in file manager module
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+    R1 = OPEN; // function Num
+    R2 = fileName; // arg1 (file name)
+    call FILE_MANAGER;
+
+    ofTableEntry = R0; // return val of open fn will be in R0
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+
+    // open function failed either due to file not exist or table is full (open file table max size = 32)
+    if (ofTableEntry < 0) then
+        [retAddr] = ofTableEntry;
+        goto END;
+    endif;
+    
+    // now we have a resource table entry (RTentry) and open file table entry (ofTableEntry)
+
+    // setup Resource table
+    [RTStart + RTentry * 2 + 0] = FILE;
+    [RTStart + RTentry * 2 + 1] = ofTableEntry;
+
+    [retAddr] = RTentry; // return resource table entry (file descriptor)
+endif;
+
+// close : arguements(file descriptor)
+// return 0 : for sucess
+// return -1 : file descriptor is invalid
+if (syscallNum == INT_CLOSE) then
+    // alias i used : 
+    // R5 -> RTentry (resource table index for the file (arg1))
+    // R6 -> RTStart (basically an offset to current process' resource table)
+    // R7 -> ofTableEntry (index of open file table which can be allocated)
+
+    alias RTentry R5;
+    alias RTStart R6;
+
+    RTentry = [[PTBR + (userSP - 4) / 512 * 2] * 512 + (userSP - 4) % 512];
+    RTStart = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET;
+
+    // if index of RT given (fileDescriptor) is invalid return -1
+    if (RTentry < 0 || RTentry > 7) then
+        [retAddr] = -1;
+        goto END;
+    endif;
+    
+    // if the index of file Descriptor is wrong (as in its not a file) return -1 
+    if ([RTStart + RTentry * 2] != FILE) then
+        [retAddr] = -1;
+        goto END;
+    endif;
+
+    // get the corresponding open table index
+    alias ofTableEntry R7;
+    ofTableEntry = [RTStart + RTentry * 2 + 1];
+
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+    R1 = CLOSE; // function Num
+    R2 = ofTableEntry; // arg1 (openfiletable index)
+
+    call FILE_MANAGER;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+
+    // invalidate the resource table entry
+    [RTStart + RTentry * 2 + 0] = -1;
+    [RTStart + RTentry * 2 + 1] = -1;
+
+    [retAddr] = 0;
+endif;
+
+END:
+[currProcessTable + 9] = 0;
+SP = [currProcessTable + 13];
+ireturn;
