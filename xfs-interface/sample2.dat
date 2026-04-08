@@ -1,6 +1,1 @@
-There is a place where the sidewalk ends
-And before the street begins,
-And there the grass grows soft and white,
-And there the sun burns crimson bright,
-And there the moon-bird rests from his flight
-To cool in the peppermint wind.
+The CLOSE block has no such issue since resourceTableEntry is computed once before the multipush and only read after — and since R6 is restored by multipop to that same computed value, it's fine there
