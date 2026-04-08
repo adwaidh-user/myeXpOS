@@ -1,0 +1,64 @@
+// obtain current PID
+alias currentPID R0;
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+multipush(BP);
+
+// current process table entry 
+alias process_table_entry R1;
+process_table_entry = PROCESS_TABLE + currentPID * 16;
+
+[process_table_entry + 12] = SP % 512; // KPTR
+[process_table_entry + 14] = PTBR; // PTBR
+[process_table_entry + 15] = PTLR; // PTLR
+
+// finding next Ready / Created process (if none default to idle)
+alias nextPID R2;
+alias iter R3;
+
+nextPID = 0;
+iter = (currentPID + 1) % 16;
+
+while (iter != currentPID) do
+    if (iter == 0) then
+        iter = iter + 1;
+        continue;
+    endif;
+
+    if (([PROCESS_TABLE + iter * 16 + 4] == CREATED) || ([PROCESS_TABLE + iter * 16 + 4] == READY)) then
+        if (nextPID == 0) then
+            nextPID = iter;
+        endif;
+    endif;    
+
+    if ([PROCESS_TABLE + iter * 16 + 4] == RUNNING) then
+        nextPID = iter;
+        break;
+    endif;
+    
+    iter = (iter + 1) % 16;
+endwhile;
+
+// setting stack value to top of stack
+// reminder KPTR stores offset 
+SP = [PROCESS_TABLE + 16 * nextPID + 11] * 512 + [PROCESS_TABLE + 16 * nextPID + 12];
+
+// restoring value of PTBR and PTLR
+PTBR = [PROCESS_TABLE + 16 * nextPID + 14];
+PTLR = [PROCESS_TABLE + 16 * nextPID + 15];
+
+// setting currently executing process to nextpid
+[SYSTEM_STATUS_TABLE + 1] = nextPID;
+
+// if process is in created state, set SP to UPTR, set State as RUNNING, Change mode flag to 0, ireturn
+if ([PROCESS_TABLE + 16 * nextPID + 4] == CREATED) then
+    SP = [PROCESS_TABLE + 16 * nextPID + 13];
+    BP = [[PROCESS_TABLE + 16 * nextPID + 11] * 512];
+    [PROCESS_TABLE + 16 * nextPID + 4] = RUNNING;
+    [PROCESS_TABLE + 16 * nextPID + 9] = 0;
+    ireturn;
+endif;
+
+[PROCESS_TABLE + 16 * nextPID + 4] = RUNNING;
+multipop(BP);
+return;⏎  

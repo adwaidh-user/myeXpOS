@@ -1,0 +1,29 @@
+int main() {
+    decl
+        int temp, pidone, pidtwo, pidthr;
+    enddecl
+
+    begin
+        pidone = exposcall("Fork");
+        pidtwo = exposcall("Fork");
+        pidthr = exposcall("Fork");
+        breakpoint;
+        if (pidone == 0) then
+            temp = exposcall("Exec", "p_pid.xsm");
+        else
+            temp = exposcall("Wait", pidone);
+            if (pidtwo == 0) then
+                temp = exposcall("Exec", "p_pid.xsm");
+            else
+                temp = exposcall("Wait", pidtwo);
+                if (pidthr == 0) then
+                    temp = exposcall("Exec", "p_pid.xsm");
+                else
+                    temp = exposcall("Wait", pidthr);
+                endif;
+            endif;
+            temp = exposcall("Exec", "cat.xsm");
+        endif;
+    return 0;
+  end
+}
