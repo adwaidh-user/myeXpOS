@@ -1,0 +1,169 @@
+alias userSP R0;
+alias syscallNum R1;
+alias retAddr R2;
+alias currProcessTable R3;
+
+userSP = SP;
+currProcessTable = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
+syscallNum = [[PTBR + (userSP - 5) / 512 * 2] * 512 + (userSP - 5) % 512];
+retAddr = [PTBR + (userSP - 1) / 512 * 2] * 512 + (userSP - 1) % 512;
+
+[currProcessTable + 9] = syscallNum;
+
+[currProcessTable + 13] = userSP;
+SP = [currProcessTable + 11] * 512 - 1;
+
+// open : arguements(filename)
+// return file descriptor : for sucess
+// return -1 : file not found / file is not data or root
+// return -2 : system has reached limit of open files
+// return -3 : process has reached limit of resources
+if (syscallNum == INT_OPEN) then
+    alias fileName R4;
+    alias resourceTableEntry R5;
+
+    fileName = [[PTBR + (userSP - 4) / 512 * 2] * 512 + (userSP - 4) % 512];
+    resourceTableEntry = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET;
+
+    alias resourceTableIdx R0;
+    resourceTableIdx = 0;
+    while (resourceTableIdx < 8) do
+        if ([resourceTableEntry] == -1) then
+            break;
+        endif;    
+
+        resourceTableEntry = resourceTableEntry + 2;
+        resourceTableIdx = resourceTableIdx + 1;
+    endwhile;
+
+    if (resourceTableIdx == 8) then
+        [retAddr] = -3;
+        goto END;
+    endif;
+
+    multipush(R0, R1, R2, R3, R4, R5);
+    R1 = OPEN;
+    R2 = fileName;
+    call FILE_MANAGER;
+
+    alias OpenFileIdx R7;
+    OpenFileIdx = R0;
+    multipop(R0, R1, R2, R3, R4, R5);
+
+    if (OpenFileIdx < 0) then
+        [retAddr] = OpenFileIdx;
+        goto END;
+    endif;
+    
+    [resourceTableEntry + 0] = FILE;
+    [resourceTableEntry + 1] = OpenFileIdx;
+
+    [retAddr] = resourceTableIdx;
+    goto END;
+endif;
+
+//-----------------------------------
+//--- COMMON CONSTRAINT CHECKS ------
+
+alias fd R4;
+fd = [[PTBR + (userSP - 4) / 512 * 2] * 512 + (userSP - 4) % 512];
+if (fd < 0 || fd > 7) then
+    [retAddr] = -1;
+    goto END;
+endif;
+
+alias resourceTableEntry R5;
+resourceTableEntry = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + fd * 2;
+    
+if ([resourceTableEntry] != FILE) then
+    [retAddr] = -1;
+    goto END;
+endif;
+
+//----------------------------------
+
+// seek : arguements(file descriptor, offset)
+// return     0 : for sucess
+//           -1 : file descriptor is invalid
+//           -2 : offset moves ptr outside the file
+if (syscallNum == INT_SEEK) then
+    alias openFileEntry R6;
+    openFileEntry = OPEN_FILE_TABLE + [resourceTableEntry + 1] * 4;
+    alias inodeEntry R5;
+    inodeEntry = INODE_TABLE + [openFileEntry] * 16;
+
+    alias offset R7;
+    offset = [[PTBR + (userSP - 3) / 512 * 2] * 512 + (userSP - 3) % 512];
+
+    multipush(R1, R2, R3, R4, R5, R6, R7);
+    R1 = ACQUIRE_INODE;
+    R2 = [openFileEntry];
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3, R4, R5, R6, R7);
+
+    if (R0 == -1) then
+        [retAddr] = -1;
+        goto END;
+    endif;
+
+    alias lseek R8;
+    lseek = [openFileEntry + 2];
+    alias fileSize R9;
+
+    if ([openFileEntry] == INODE_ROOT) then
+        fileSize = 480;
+    else
+        fileSize = [inodeEntry + 2];
+    endif;
+
+    if (lseek + offset < 0) then
+        [retAddr] = -2;
+        goto INODE_RELEASE_EXIT;
+    endif;
+
+    if (offset == 0) then
+        lseek = 0;
+    else
+        if (lseek + offset > fileSize) then
+            lseek = fileSize;
+        else
+            lseek = lseek + offset;
+        endif;
+    endif;
+    [openFileEntry + 2] = lseek;
+    [retAddr] = 0;
+
+INODE_RELEASE_EXIT:
+    multipush(R2, R3);
+    R1 = RELEASE_INODE;
+    R2 = [openFileEntry];
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+    call RESOURCE_MANAGER;
+    multipop(R2, R3);
+
+    goto END;
+endif;
+
+// close : arguements(file descriptor)
+// return     0 : for sucess
+//           -1 : file descriptor is invalid
+if (syscallNum == INT_CLOSE) then
+
+    multipush(R0, R1, R2, R3, R4, R5);
+    R1 = CLOSE;
+    R2 = [resourceTableEntry + 1];
+    call FILE_MANAGER;
+    multipop(R0, R1, R2, R3, R4, R5);
+
+    [resourceTableEntry + 0] = -1;
+    [resourceTableEntry + 1] = -1;
+
+    [retAddr] = 0;
+endif;
+
+END:
+[currProcessTable + 9] = 0;
+SP = [currProcessTable + 13];
+ireturn;

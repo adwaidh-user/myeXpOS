@@ -1,0 +1,235 @@
+alias functionNum R1;
+
+if (functionNum == BUFFERED_WRITE) then
+    // args
+    alias blockNum R2;
+    alias offset R3;
+    alias word R4;
+
+    alias bufNum R5;
+    bufNum = blockNum % MAX_BUFFER;
+
+    multipush(R1, R2, R3, R4, R5);
+    R1 = ACQUIRE_BUFFER;
+    R2 = bufNum;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3, R4, R5);
+
+    alias bufTableEntry R6;
+    bufTableEntry = BUFFER_TABLE + bufNum * 4;
+
+    if ([bufTableEntry] != blockNum) then
+        // if the dirty bit is set
+        if ([bufTableEntry + 1] == 1) then
+            multipush(R1, R2, R3, R4, R5, R6);
+            R1 = DISK_STORE;
+            R2 = [SYSTEM_STATUS_TABLE + 1];
+            R3 = BUFFER_BASE + bufNum;
+            R4 = [bufTableEntry];
+
+            call DEVICE_MANAGER;
+            multipop(R1, R2, R3, R4, R5, R6);
+
+            [bufTableEntry + 1] = 0;
+        endif;
+
+        multipush(R1, R2, R3, R4, R5, R6);
+        R1 = DISK_LOAD;
+        R4 = blockNum;
+        R2 = [SYSTEM_STATUS_TABLE + 1];
+        R3 = BUFFER_BASE + bufNum;
+
+        call DEVICE_MANAGER;
+        multipop(R1, R2, R3, R4, R5, R6);
+
+        [bufTableEntry] = blockNum;
+    endif;
+
+    [(BUFFER_BASE + bufNum) * 512 + offset] = word;
+
+    [bufTableEntry + 1] = 1;
+
+    multipush(R1, R2, R3, R4, R5, R6);
+    R1 = RELEASE_BUFFER;
+    R2 = bufNum;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3, R4, R5, R6);
+    return;
+endif;
+
+if (functionNum == BUFFERED_READ) then
+    // args
+    alias blockNum R2;
+    alias offset R3;
+    alias memAddr R4;
+
+    alias bufNum R5;
+    bufNum = blockNum % MAX_BUFFER;
+
+    multipush(R1, R2, R3, R4, R5);
+    R1 = ACQUIRE_BUFFER;
+    R2 = bufNum;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3, R4, R5);
+
+    alias bufTableEntry R6;
+    bufTableEntry = BUFFER_TABLE + bufNum * 4;
+
+    if ([bufTableEntry] != blockNum) then
+        // if the dirty bit is set
+        if ([bufTableEntry + 1] == 1) then
+            multipush(R1, R2, R3, R4, R5, R6);
+            R1 = DISK_STORE;
+            R2 = [SYSTEM_STATUS_TABLE + 1];
+            R3 = BUFFER_BASE + bufNum;
+            R4 = [bufTableEntry];
+
+            call DEVICE_MANAGER;
+            multipop(R1, R2, R3, R4, R5, R6);
+
+            [bufTableEntry + 1] = 0;
+        endif;
+
+        multipush(R1, R2, R3, R4, R5, R6);
+        R1 = DISK_LOAD;
+        R4 = blockNum;
+        R2 = [SYSTEM_STATUS_TABLE + 1];
+        R3 = BUFFER_BASE + bufNum;
+
+        call DEVICE_MANAGER;
+        multipop(R1, R2, R3, R4, R5, R6);
+
+        [bufTableEntry] = blockNum;
+    endif;
+
+    [memAddr] = [(BUFFER_BASE + bufNum) * 512 + offset];
+
+    multipush(R1, R2, R3, R4, R5, R6);
+    R1 = RELEASE_BUFFER;
+    R2 = bufNum;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3, R4, R5, R6);
+    return;
+endif;
+
+// return file table index or -1(error code) or -2(no free entry in open file table)
+if (functionNum == OPEN) then
+    // arguements
+    alias fileName R2;
+
+    alias inodeIndex R3;
+    inodeIndex = 0;
+    while (inodeIndex < MAX_FILE_NUM) do
+        if ([INODE_TABLE + inodeIndex * 16 + 1] == fileName) then
+            break;
+        endif;
+        inodeIndex = inodeIndex + 1;
+    endwhile;
+
+    if (inodeIndex == MAX_FILE_NUM) then
+        R0 = -1;
+        return;
+    endif;
+
+    multipush(R1, R2, R3);
+    R1 = ACQUIRE_INODE;
+    R2 = inodeIndex;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3);
+
+    if (R0 == -1) then
+        return;
+    endif;
+
+    if ([INODE_TABLE + inodeIndex * 16] == EXEC) then
+        R0 = -1;
+        goto INODE_RELEASE_EXIT;
+    endif;
+
+    alias openFileIdx R0;
+    while (openFileIdx < MAX_OPENFILE_NUM) do
+        if ([OPEN_FILE_TABLE + openFileIdx * 4] == -1) then
+            break;
+        endif;
+
+        openFileIdx = openFileIdx + 1;
+    endwhile;
+
+    if (openFileIdx == MAX_OPENFILE_NUM) then
+        R0 = -2;
+        goto INODE_RELEASE_EXIT;
+    endif;
+
+    alias openFileEntry R4;
+    openFileEntry = OPEN_FILE_TABLE + openFileIdx * 4;
+
+    if (fileName == "root") then
+        [openFileEntry] = INODE_ROOT;
+    else
+        alias fileStatusEntry R5;
+        fileStatusEntry = FILE_STATUS_TABLE + inodeIndex * 4;
+        if ([fileStatusEntry + 1] == -1) then
+            [fileStatusEntry + 1] = 1;
+        else
+            [fileStatusEntry + 1] = [fileStatusEntry + 1] + 1;
+        endif;
+
+        [openFileEntry] = inodeIndex;
+    endif;
+
+    [openFileEntry + 1] = 1;
+    [openFileEntry + 2] = 0;
+
+    R0 = openFileIdx;
+
+INODE_RELEASE_EXIT:
+    multipush(R0, R1, R2, R3);
+    R1 = RELEASE_INODE;
+    R2 = inodeIndex;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+    call RESOURCE_MANAGER;
+    multipop(R0, R1, R2, R3);
+    
+    return;
+endif;
+
+if (functionNum == CLOSE) then
+    // args: openFileIdx
+    // return: None
+
+    alias openFileIdx R2;
+
+    alias openFileEntry R3;
+    openFileEntry = OPEN_FILE_TABLE + openFileIdx * 4;
+
+    // decrement open instance count
+    [openFileEntry + 1] = [openFileEntry + 1] - 1;
+
+    // no more process has this file opened, so clear the entry
+    if ([openFileEntry + 1] == 0) then
+        if ([openFileEntry] != INODE_ROOT) then
+            alias fileStatusEntry R4;
+            fileStatusEntry = FILE_STATUS_TABLE + [openFileEntry] * 4;
+            [fileStatusEntry + 1] = [fileStatusEntry + 1] - 1;
+
+            if ([fileStatusEntry + 1] == 0) then
+                [fileStatusEntry + 1] = -1;
+            endif;
+        endif;
+
+        [openFileEntry + 0] = -1;
+        [openFileEntry + 1] = -1;
+        [openFileEntry + 2] = -1;
+    endif;
+endif;
+
+return;
