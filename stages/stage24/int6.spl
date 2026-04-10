@@ -33,15 +33,15 @@ else
 	endif; 
 
     alias resourceTableEntry R5;
-    resourceTableEntry = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET;
+    resourceTableEntry = [currProcessTable + 11] * 512 + RESOURCE_TABLE_OFFSET + fd * 2;
 	
-	if ([resourceTableEntry + fd * 2] != FILE) then
+	if ([resourceTableEntry] != FILE) then
 		[retAddr] = -1;
 		goto END;
 	endif;
 	
 	alias openFileEntry R6;
-	openFileEntry = OPEN_FILE_TABLE + [resourceTableEntry + fd * 2 + 1] * 4;
+	openFileEntry = OPEN_FILE_TABLE + [resourceTableEntry + 1] * 4;
 	alias inodeIndex R7;
 	inodeIndex = [openFileEntry];
 

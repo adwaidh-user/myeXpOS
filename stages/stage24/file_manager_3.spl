@@ -1,198 +1,173 @@
-alias retVal R0;
 alias functionNum R1;
-alias arg1 R2;
-alias arg2 R3;
-alias arg3 R4;
 
-// arguements (arg1 : disk block number, arg2 : offset, arg3 : memory address to save value at)
-// no return
 if (functionNum == BUFFERED_READ) then
-    // get buffer number (b/w 0 and 3 inclusive)
-    alias bufferNum R5;
-    bufferNum = arg1 % MAX_BUFFER;
+    // args
+    alias blockNum R2;
+    alias offset R3;
+    alias memAddr R4;
 
-    // acquire the buffer resource
-    multipush(R0, R1, R2, R3, R4, R5);
+    alias bufNum R5;
+    bufNum = blockNum % MAX_BUFFER;
+
+    multipush(R1, R2, R3, R4, R5);
     R1 = ACQUIRE_BUFFER;
-    R2 = bufferNum;
+    R2 = bufNum;
     R3 = [SYSTEM_STATUS_TABLE + 1];
 
     call RESOURCE_MANAGER;
-    multipop(R0, R1, R2, R3, R4, R5);
+    multipop(R1, R2, R3, R4, R5);
 
-    // if current block in buffer is not the block we are about to place
-    if ([BUFFER_TABLE + bufferNum * 4 + 0] != arg1) then
+    alias bufTableEntry R6;
+    bufTableEntry = BUFFER_TABLE + bufNum * 4;
+
+    if ([bufTableEntry] != blockNum) then
         // if the dirty bit is set
-        if ([BUFFER_TABLE + bufferNum * 4 + 1] == 1) then
-            multipush(R0, R1, R2, R3, R4, R5);
+        if ([bufTableEntry + 1] == 1) then
+            multipush(R1, R2, R3, R4, R5, R6);
             R1 = DISK_STORE;
-            R2 = [SYSTEM_STATUS_TABLE + 1]; // pid
-            R3 = BUFFER_BASE + bufferNum; // page number
-            R4 = [BUFFER_TABLE + bufferNum * 4 + 0]; // block number
+            R2 = [SYSTEM_STATUS_TABLE + 1];
+            R3 = BUFFER_BASE + bufNum;
+            R4 = [bufTableEntry];
 
             call DEVICE_MANAGER;
-            multipop(R0, R1, R2, R3, R4, R5);
+            multipop(R1, R2, R3, R4, R5, R6);
 
-            [BUFFER_TABLE + bufferNum * 4 + 1] = 0;
+            [bufTableEntry + 1] = 0;
         endif;
 
-        multipush(R0, R1, R2, R3, R4, R5);
+        multipush(R1, R2, R3, R4, R5, R6);
         R1 = DISK_LOAD;
-        R4 = arg1;
-        R2 = [SYSTEM_STATUS_TABLE + 1]; // pid
-        R3 = BUFFER_BASE + bufferNum;
+        R4 = blockNum;
+        R2 = [SYSTEM_STATUS_TABLE + 1];
+        R3 = BUFFER_BASE + bufNum;
 
         call DEVICE_MANAGER;
-        multipop(R0, R1, R2, R3, R4, R5);
+        multipop(R1, R2, R3, R4, R5, R6);
 
-        [BUFFER_TABLE + bufferNum * 4 + 0] = arg1;
+        [bufTableEntry] = blockNum;
     endif;
 
-    [arg3] = [(BUFFER_BASE + bufferNum) * 512 + arg2];
-
-    multipush(R0, R1, R2, R3, R4, R5);
-    R1 = RELEASE_BUFFER;
-    R2 = bufferNum;
-    R3 = [SYSTEM_STATUS_TABLE + 1];
-
-    call RESOURCE_MANAGER;
-    multipop(R0, R1, R2, R3, R4, R5);
-endif;
-
-// arguements (filename)
-// return file table index or -1(error code) or -2(no free entry in open file table)
-if (functionNum == OPEN) then
-    alias iter R5;
-    alias inodeIndex R6;
-
-    iter = 0;
-
-    // find corresponding inode index
-    while (iter < MAX_FILE_NUM) do
-    if ([INODE_TABLE + iter * 16 + 1] == arg1) then
-        inodeIndex = iter;
-        break;
-    endif;
-        iter = iter + 1;
-    endwhile;
-
-    if (iter == MAX_FILE_NUM) then
-        R0 = -1; // no file with such a file name
-        return;
-    endif;
+    [memAddr] = [(BUFFER_BASE + bufNum) * 512 + offset];
 
     multipush(R1, R2, R3, R4, R5, R6);
-    R1 = ACQUIRE_INODE; // function Num
-    R2 = inodeIndex; // index in inode table
-    R3 = [SYSTEM_STATUS_TABLE + 1]; // process pid
-
-    call RESOURCE_MANAGER;
-
-    multipop(R1, R2, R3, R4, R5, R6);
-    // if acquire inode fails, return -1 for open function call aswell
-    if (R0 == -1) then
-        R0 = -1;
-        return;
-    endif;
-
-    // only data files can be opened
-    if ([INODE_TABLE + inodeIndex * 16 + 0] == EXEC) then
-        multipush(R0, R1, R2, R3, R4, R5, R6);
-        R1 = RELEASE_INODE;
-        R2 = inodeIndex;
-        R3 = [SYSTEM_STATUS_TABLE + 1];
-
-        call RESOURCE_MANAGER;
-        multipop(R0, R1, R2, R3, R4, R5, R6);
-
-        R0 = -1;
-        return;
-    endif;
-
-    // get a free entry in open file table
-    iter = 0;
-    alias ofTableIndex R7;
-    while (iter < MAX_OPENFILE_NUM) do
-        if ([OPEN_FILE_TABLE + iter * 4 + 0] == -1) then
-            break;
-        endif;
-
-        iter = iter + 1;
-    endwhile;
-
-    if (iter == MAX_OPENFILE_NUM) then
-        multipush(R0, R1, R2, R3, R4, R5, R6);
-        R1 = RELEASE_INODE;
-        R2 = inodeIndex;
-        R3 = [SYSTEM_STATUS_TABLE + 1];
-
-        call RESOURCE_MANAGER;
-        multipop(R0, R1, R2, R3, R4, R5, R6);
-
-        R0 = -2;
-        return;
-    endif;
-
-    ofTableIndex = iter;
-
-    if (arg1 == "root") then
-        [OPEN_FILE_TABLE + ofTableIndex * 4 + 0] = INODE_ROOT;
-    
-    else
-        // increment count in file status table and set corresponding inode index in open file table
-        if ([FILE_STATUS_TABLE + inodeIndex * 4 + 1] == -1) then
-            [FILE_STATUS_TABLE + inodeIndex * 4 + 1] = 1;
-
-        else
-            [FILE_STATUS_TABLE + inodeIndex * 4 + 1] = [FILE_STATUS_TABLE + inodeIndex * 4 + 1] + 1;
-
-        endif;
-            [OPEN_FILE_TABLE + ofTableIndex * 4 + 0] = inodeIndex;
-
-    endif;
-
-    // set open instance count and lseek
-    [OPEN_FILE_TABLE + ofTableIndex * 4 + 1] = 1;
-    [OPEN_FILE_TABLE + ofTableIndex * 4 + 2] = 0;
-
-    // call release inode
-    multipush(R0, R1, R2, R3, R4, R5, R6, R7);
-    R1 = RELEASE_INODE;
-    R2 = inodeIndex;
+    R1 = RELEASE_BUFFER;
+    R2 = bufNum;
     R3 = [SYSTEM_STATUS_TABLE + 1];
 
     call RESOURCE_MANAGER;
-    multipop(R0, R1, R2, R3, R4, R5, R6, R7);
-
-    R0 = ofTableIndex;
+    multipop(R1, R2, R3, R4, R5, R6);
     return;
 endif;
 
-// arguements (open file table index)
-// no return
+// return file table index or -1(error code) or -2(no free entry in open file table)
+if (functionNum == OPEN) then
+    // arguements
+    alias fileName R2;
+
+    alias inodeIndex R3;
+    inodeIndex = 0;
+    while (inodeIndex < MAX_FILE_NUM) do
+        if ([INODE_TABLE + inodeIndex * 16 + 1] == fileName) then
+            break;
+        endif;
+        inodeIndex = inodeIndex + 1;
+    endwhile;
+
+    if (inodeIndex == MAX_FILE_NUM) then
+        R0 = -1;
+        return;
+    endif;
+
+    multipush(R1, R2, R3);
+    R1 = ACQUIRE_INODE;
+    R2 = inodeIndex;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+    call RESOURCE_MANAGER;
+    multipop(R1, R2, R3);
+
+    if (R0 == -1) then
+        return;
+    endif;
+
+    if ([INODE_TABLE + inodeIndex * 16] == EXEC) then
+        R0 = -1;
+        goto INODE_RELEASE_EXIT;
+    endif;
+
+    alias openFileIdx R0;
+    while (openFileIdx < MAX_OPENFILE_NUM) do
+        if ([OPEN_FILE_TABLE + openFileIdx * 4] == -1) then
+            break;
+        endif;
+
+        openFileIdx = openFileIdx + 1;
+    endwhile;
+
+    if (openFileIdx == MAX_OPENFILE_NUM) then
+        R0 = -2;
+        goto INODE_RELEASE_EXIT;
+    endif;
+
+    alias openFileEntry R4;
+    openFileEntry = OPEN_FILE_TABLE + openFileIdx * 4;
+
+    if (fileName == "root") then
+        [openFileEntry] = INODE_ROOT;
+    else
+        alias fileStatusEntry R5;
+        fileStatusEntry = FILE_STATUS_TABLE + inodeIndex * 4;
+        if ([fileStatusEntry + 1] == -1) then
+            [fileStatusEntry + 1] = 1;
+        else
+            [fileStatusEntry + 1] = [fileStatusEntry + 1] + 1;
+        endif;
+
+        [openFileEntry] = inodeIndex;
+    endif;
+
+    [openFileEntry + 1] = 1;
+    [openFileEntry + 2] = 0;
+
+    R0 = openFileIdx;
+
+INODE_RELEASE_EXIT:
+    multipush(R0, R1, R2, R3);
+    R1 = RELEASE_INODE;
+    R2 = inodeIndex;
+    R3 = [SYSTEM_STATUS_TABLE + 1];
+    call RESOURCE_MANAGER;
+    multipop(R0, R1, R2, R3);
+    
+    return;
+endif;
+
 if (functionNum == CLOSE) then
-    // find inode index
-    alias inodeIndex R5;
-    inodeIndex = [OPEN_FILE_TABLE + arg1 * 4 + 0];
+    // args: openFileIdx
+    // return: None
+
+    alias openFileIdx R2;
+
+    alias openFileEntry R3;
+    openFileEntry = OPEN_FILE_TABLE + openFileIdx * 4;
 
     // decrement open instance count
-    [OPEN_FILE_TABLE + arg1 * 4 + 1] = [OPEN_FILE_TABLE + arg1 * 4 + 1] - 1;
+    [openFileEntry + 1] = [openFileEntry + 1] - 1;
 
     // no more process has this file opened, so clear the entry
-    if ([OPEN_FILE_TABLE + arg1 * 4 + 1] == 0) then
-        [OPEN_FILE_TABLE + arg1 * 4 + 0] = -1;
-        [OPEN_FILE_TABLE + arg1 * 4 + 1] = -1;
-        [OPEN_FILE_TABLE + arg1 * 4 + 2] = -1;
+    if ([openFileEntry + 1] == 0) then
+        if ([openFileEntry] != INODE_ROOT) then
+            alias fileStatusEntry R4;
+            fileStatusEntry = FILE_STATUS_TABLE + [openFileEntry] * 4;
+            [fileStatusEntry + 1] = [fileStatusEntry + 1] - 1;
 
-        // if its not root then decrement file_oepn_count in file status table
-        if (inodeIndex != INODE_ROOT) then
-            [FILE_STATUS_TABLE + inodeIndex * 4 + 1] = [FILE_STATUS_TABLE + inodeIndex * 4 + 1] - 1;
-
-            // if it reaches 0, reset to -1
-            if ([FILE_STATUS_TABLE + inodeIndex * 4 + 1] == 0) then
-                [FILE_STATUS_TABLE + inodeIndex * 4 + 1] = -1;
+            if ([fileStatusEntry + 1] == 0) then
+                [fileStatusEntry + 1] = -1;
             endif;
         endif;
+
+        [openFileEntry + 0] = -1;
+        [openFileEntry + 1] = -1;
+        [openFileEntry + 2] = -1;
     endif;
 endif;
 

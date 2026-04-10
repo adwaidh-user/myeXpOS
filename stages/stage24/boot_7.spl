@@ -93,6 +93,9 @@ loadi(60, 4);
 // disk free list
 loadi(61, 2);
 
+// root file
+loadi(62, 5);
+
 // Library
 loadi(63, 13);
 loadi(64, 14);
